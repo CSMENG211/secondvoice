@@ -31,6 +31,23 @@ python main.py --model small
 python main.py --model medium
 ```
 
+### Ask ChatGPT
+
+Install Playwright's browser once:
+
+```sh
+python -m playwright install chromium
+```
+
+Then record, transcribe, open ChatGPT, paste the transcript, and submit it:
+
+```sh
+python main.py --ask-chatgpt
+```
+
+The first time, ChatGPT may ask you to log in. The browser profile is stored at
+`~/.offergpt/browser-profile`, so future runs can reuse that login.
+
 ### Pick a Microphone
 
 ```sh

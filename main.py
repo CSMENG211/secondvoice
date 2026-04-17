@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from offergpt.audio import list_microphones, record_until_enter
+from offergpt.browser import submit_to_chatgpt
 from offergpt.transcription import DEFAULT_MODEL, transcribe
 
 
@@ -17,6 +18,11 @@ def main() -> None:
         "--model",
         default=DEFAULT_MODEL,
         help=f"Local faster-whisper model name. Default: {DEFAULT_MODEL}",
+    )
+    parser.add_argument(
+        "--ask-chatgpt",
+        action="store_true",
+        help="Open ChatGPT in a browser, paste the transcript, and press Enter.",
     )
     args = parser.parse_args()
 
@@ -36,6 +42,9 @@ def main() -> None:
 
     print("\nTranscript:")
     print(transcript.strip() or "(No speech detected.)")
+
+    if args.ask_chatgpt:
+        submit_to_chatgpt(transcript)
 
 
 if __name__ == "__main__":
