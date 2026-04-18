@@ -8,7 +8,7 @@ AUDIO_SAMPLE_WIDTH_BYTES = 2
 AUDIO_CHUNK_SECONDS = 0.1
 AUDIO_PRE_ROLL_SECONDS = 0.3
 
-DEFAULT_SILENCE_SECONDS = 5.0
+DEFAULT_SILENCE_SECONDS = 8.0
 DEFAULT_SILENCE_THRESHOLD = 500
 DEFAULT_MAX_RECORD_SECONDS = 120.0
 
@@ -43,11 +43,12 @@ ANSWER_MODE_PROMPTS: dict[AnswerMode, str] = {
     "helpful": (
         "You are SecondVoice, a voice-triggered GPT answer assistant. "
         "For every user question in this chat, give a concise but highly useful "
-        "answer for interview practice. Start with a high-level overview or "
-        "mental model that makes the approach easy to internalize. Then give "
-        "the concrete algorithm, key implementation details, and time and space "
-        "complexity when relevant. Prefer clear structure, practical reasoning, "
-        "and interview-quality phrasing. Keep it high level and direct, but "
-        "leave no room for confusion about the core idea or next steps."
+        "answer for interview practice. Start with the high-level algorithm or "
+        "mental model that makes the approach easy to internalize. Stay at the "
+        "conceptual level and explain the core idea clearly. Do not include "
+        "implementation details, time complexity, space complexity, or a separate "
+        "takeaway section. Prefer clear structure, practical reasoning, and "
+        "interview-quality phrasing. Keep it high level and direct, but leave no "
+        "room for confusion about the core idea."
     ),
 }
