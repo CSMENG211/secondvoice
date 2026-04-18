@@ -15,9 +15,9 @@ def extract_question_prompt(
     if mode == "always":
         return transcript.strip()
 
-    phrase_prompt = extract_after_question_start_pattern(transcript, start_pattern)
-    if phrase_prompt is not None:
-        return phrase_prompt
+    prompt = extract_after_start_pattern(transcript, start_pattern)
+    if prompt is not None:
+        return prompt
 
     if mode == "smart" and is_question(transcript):
         return transcript.strip(" .,:;-")
@@ -25,24 +25,17 @@ def extract_question_prompt(
     return None
 
 
-def extract_after_question_start_pattern(
+def extract_after_start_pattern(
     transcript: str,
     start_pattern: str,
 ) -> str | None:
     """Return transcript text that appears after a configured start regex."""
     normalized_transcript = normalize(transcript)
-    normalized_pattern = normalize_regex_pattern(start_pattern)
-    match = re.search(normalized_pattern, normalized_transcript)
+    match = re.search(start_pattern.lower(), normalized_transcript)
     if not match:
         return None
 
-    prompt = transcript_after_normalized_index(transcript, normalized_transcript, match.end())
-    return strip_leading_connector(prompt)
-
-
-def normalize_regex_pattern(pattern: str) -> str:
-    """Normalize regex patterns the same way transcript text is normalized."""
-    return pattern.lower()
+    return transcript_after_normalized_index(transcript, normalized_transcript, match.end())
 
 
 def is_question(transcript: str) -> bool:
@@ -77,18 +70,3 @@ def transcript_after_normalized_index(
         return ""
 
     return " ".join(original_words[-len(suffix_words):]).strip(" .,:;-")
-
-
-def strip_leading_connector(prompt: str) -> str:
-    """Remove filler words that often connect a trigger phrase to the prompt."""
-    cleaned = prompt
-    while True:
-        next_cleaned = re.sub(
-            r"^(the issue is|the issue|is that|is|that|with|about)\b[\s:,.;-]*",
-            "",
-            cleaned,
-            flags=re.IGNORECASE,
-        ).strip()
-        if next_cleaned == cleaned.strip():
-            return next_cleaned
-        cleaned = next_cleaned

@@ -8,7 +8,7 @@ AUDIO_SAMPLE_WIDTH_BYTES = 2
 AUDIO_CHUNK_SECONDS = 0.1
 AUDIO_PRE_ROLL_SECONDS = 0.3
 
-DEFAULT_SILENCE_SECONDS = 8.0
+DEFAULT_SILENCE_SECONDS = 6.8
 DEFAULT_SILENCE_THRESHOLD = 500
 DEFAULT_MAX_RECORD_SECONDS = 120.0
 
@@ -21,7 +21,7 @@ DEFAULT_BROWSER_PROFILE = Path.home() / ".secondvoice" / "browser-profile"
 DEFAULT_CDP_URL = "http://127.0.0.1:9222"
 PERSISTENT_TYPE_DELAY_MS = 25
 
-DEFAULT_QUESTION_START_PATTERN = r"\b(?:ok|okay)\s+so\b"
+DEFAULT_QUESTION_START_PATTERN = r"\b(?:(?:ok|okay)\s+so|so\s+the)\b"
 
 AnswerMode = Literal["generic", "helpful"]
 
@@ -42,13 +42,14 @@ ANSWER_MODE_PROMPTS: dict[AnswerMode, str] = {
     ),
     "helpful": (
         "You are SecondVoice, a voice-triggered GPT answer assistant. "
-        "For every user question in this chat, give a concise but highly useful "
-        "answer for interview practice. Start with the high-level algorithm or "
-        "mental model that makes the approach easy to internalize. Stay at the "
-        "conceptual level and explain the core idea clearly. Do not include "
-        "implementation details, time complexity, space complexity, or a separate "
-        "takeaway section. Prefer clear structure, practical reasoning, and "
-        "interview-quality phrasing. Keep it high level and direct, but leave no "
-        "room for confusion about the core idea."
+        "For every user question in this chat, give a very concise answer for "
+        "interview practice using exactly two short paragraphs. First paragraph: "
+        "name the high-level LeetCode-style category, such as DP, sliding window, "
+        "monotonic deque, sorted set, hash map, graph traversal, binary search, "
+        "two pointers, or heap. Second paragraph: explain the core mental model "
+        "in one compressed sentence. Use direct wording that immediately states "
+        "the key idea and the minimal intuition needed to recognize the pattern "
+        "again. Include a very short implementation description only when it "
+        "makes the idea easier to demonstrate."
     ),
 }
