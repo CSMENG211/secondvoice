@@ -9,7 +9,7 @@ from constants import (
     AnswerMode,
     DEFAULT_ANSWER_MODE,
     DEFAULT_MAX_RECORD_SECONDS,
-    DEFAULT_QUESTION_START_PHRASES,
+    DEFAULT_QUESTION_START_PATTERN,
     DEFAULT_QUESTION_TRIGGER_MODE,
     DEFAULT_SILENCE_SECONDS,
     DEFAULT_SILENCE_THRESHOLD,
@@ -62,11 +62,10 @@ def record_and_transcribe_once() -> str:
 
 def listen_loop(options: RuntimeOptions) -> None:
     """Continuously capture utterances, extract prompts, and optionally submit them."""
-    question_start_phrases = list(DEFAULT_QUESTION_START_PHRASES)
     transcriber = LocalTranscriber(DEFAULT_TRANSCRIPTION_MODEL)
     is_first_submission = True
 
-    print_listen_mode_banner(question_start_phrases)
+    print_listen_mode_banner()
 
     try:
         while True:
@@ -75,7 +74,7 @@ def listen_loop(options: RuntimeOptions) -> None:
 
             prompt = extract_question_prompt(
                 transcript,
-                question_start_phrases,
+                DEFAULT_QUESTION_START_PATTERN,
                 DEFAULT_QUESTION_TRIGGER_MODE,
             )
             if not should_handle_prompt(prompt):
@@ -129,17 +128,14 @@ def build_chatgpt_prompt(
     return f"{ANSWER_MODE_PROMPTS[answer_mode]}\n\nQuestion:\n{prompt}"
 
 
-def print_listen_mode_banner(question_start_phrases: list[str]) -> None:
+def print_listen_mode_banner() -> None:
     """Print the active listen-mode trigger settings."""
     print("Listen mode is active.")
     print("Audio start trigger: speech begins")
     print(f"Audio stop trigger: {DEFAULT_SILENCE_SECONDS:g}s of silence")
     print(f"Question trigger mode: {DEFAULT_QUESTION_TRIGGER_MODE}")
     if DEFAULT_QUESTION_TRIGGER_MODE in ("phrase", "smart"):
-        print(
-            "Question start phrases: "
-            + ", ".join(repr(phrase) for phrase in question_start_phrases)
-        )
+        print(f"Question start pattern: {DEFAULT_QUESTION_START_PATTERN!r}")
     print("Press Ctrl+C to stop.")
 
 

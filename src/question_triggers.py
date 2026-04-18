@@ -1,21 +1,21 @@
 import re
 from typing import Literal
 
-from constants import DEFAULT_QUESTION_START_PHRASES
+from constants import DEFAULT_QUESTION_START_PATTERN
 
 QuestionTriggerMode = Literal["phrase", "smart", "always"]
 
 
 def extract_question_prompt(
     transcript: str,
-    start_phrases: list[str] | tuple[str, ...] = DEFAULT_QUESTION_START_PHRASES,
+    start_pattern: str = DEFAULT_QUESTION_START_PATTERN,
     mode: QuestionTriggerMode = "phrase",
 ) -> str | None:
     """Extract a prompt when the transcript matches the selected trigger mode."""
     if mode == "always":
         return transcript.strip()
 
-    phrase_prompt = extract_after_question_start_phrase(transcript, start_phrases)
+    phrase_prompt = extract_after_question_start_pattern(transcript, start_pattern)
     if phrase_prompt is not None:
         return phrase_prompt
 
@@ -25,21 +25,24 @@ def extract_question_prompt(
     return None
 
 
-def extract_after_question_start_phrase(
+def extract_after_question_start_pattern(
     transcript: str,
-    start_phrases: list[str] | tuple[str, ...],
+    start_pattern: str,
 ) -> str | None:
-    """Return transcript text that appears after a configured start phrase."""
+    """Return transcript text that appears after a configured start regex."""
     normalized_transcript = normalize(transcript)
+    normalized_pattern = normalize_regex_pattern(start_pattern)
+    match = re.search(normalized_pattern, normalized_transcript)
+    if not match:
+        return None
 
-    for phrase in start_phrases:
-        normalized_phrase = normalize(phrase)
-        match = re.search(rf"\b{re.escape(normalized_phrase)}\b", normalized_transcript)
-        if match:
-            prompt = transcript_after_normalized_index(transcript, normalized_transcript, match.end())
-            return strip_leading_connector(prompt)
+    prompt = transcript_after_normalized_index(transcript, normalized_transcript, match.end())
+    return strip_leading_connector(prompt)
 
-    return None
+
+def normalize_regex_pattern(pattern: str) -> str:
+    """Normalize regex patterns the same way transcript text is normalized."""
+    return pattern.lower()
 
 
 def is_question(transcript: str) -> bool:
@@ -48,8 +51,10 @@ def is_question(transcript: str) -> bool:
 
 
 def normalize(text: str) -> str:
-    """Lowercase text and collapse punctuation into single spaces."""
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", text.lower())).strip()
+    """Lowercase text, remove punctuation, and normalize common trigger words."""
+    words = re.sub(r"[^a-z0-9]+", " ", text.lower()).split()
+    normalized_words = ["ok" if word == "okay" else word for word in words]
+    return " ".join(normalized_words)
 
 
 def transcript_after_normalized_index(
@@ -79,7 +84,7 @@ def strip_leading_connector(prompt: str) -> str:
     cleaned = prompt
     while True:
         next_cleaned = re.sub(
-            r"^(is that|is|that|with|about)\b[\s:,.;-]*",
+            r"^(the issue is|the issue|is that|is|that|with|about)\b[\s:,.;-]*",
             "",
             cleaned,
             flags=re.IGNORECASE,
