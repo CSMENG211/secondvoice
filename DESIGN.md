@@ -183,21 +183,33 @@ The orchestration layer. It owns high-level runtime paths, threading, prompt con
 - `print_stream_mode_banner(options)`: Logs active runtime settings.
 - `print_transcript(transcript)`: Logs the transcript or a no-speech marker.
 
-### `src/audio.py`
+### `src/audio/`
 
-Microphone capture and WAV writing.
+Audio capture, segmentation, WAV writing, and amplitude helpers. `src/audio/__init__.py` re-exports the public functions used by the app, so callers can continue to import from `audio`.
+
+#### `src/audio/enrollment.py`
 
 - `capture_enrollment_utterance(...)`: Records one voice-enrollment sentence using speech-start and silence-stop triggers.
+
+#### `src/audio/segmenter.py`
+
 - `SemanticEndpointJob`: Draft chunk snapshot submitted from the recorder thread to the semantic worker.
 - `SemanticEndpointResult`: Completion decision sent from the semantic worker back to the recorder thread.
-- `stream_utterance_segments(...)`: Continuously records utterance WAV files, queues semantic completion checks after a short pause, and pushes completed paths into a queue after semantic completion or hard silence.
+- `StreamSegmenter`: Owns stream-recording mutable state, including open WAV file, segment index, pause index, silence counters, pre-roll, semantic queues, and segment finalization.
+- `stream_utterance_segments(...)`: Compatibility wrapper that creates a `StreamSegmenter` and runs it.
 - `run_semantic_endpoint_worker(...)`: Consumes semantic draft jobs, writes temporary draft WAVs, runs the detector, and publishes results without blocking microphone capture.
+
+#### `src/audio/wav.py`
+
 - `write_wav_file(output_path, chunks)`: Writes raw chunks into a complete WAV file, used for semantic endpoint draft snapshots.
 - `open_wav_writer(output_path)`: Opens a mono int16 WAV writer using app audio constants.
+- `write_chunks(wav_file, chunks)`: Writes raw audio chunks into a WAV file.
+
+#### `src/audio/levels.py`
+
 - `audio_blocksize()`: Converts chunk duration into sample count.
 - `block_count_for_seconds(seconds)`: Converts seconds into audio chunk count.
 - `create_pre_roll_buffer()`: Keeps a small buffer of audio before speech starts, so segment starts are not clipped.
-- `write_chunks(wav_file, chunks)`: Writes raw audio chunks into a WAV file.
 - `chunk_is_speech(chunk, threshold)`: Uses RMS amplitude to classify a chunk as speech or silence.
 - `rms_level(chunk)`: Computes RMS amplitude for int16 audio samples.
 

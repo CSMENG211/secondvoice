@@ -1,7 +1,4 @@
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
-import io
 from pathlib import Path
-import os
 import threading
 from typing import Protocol
 import wave
@@ -19,11 +16,6 @@ from constants import (
 
 DEFAULT_BACKEND = DEFAULT_FINAL_TRANSCRIPTION_BACKEND
 DEFAULT_MODEL = DEFAULT_FINAL_TRANSCRIPTION_MODEL
-DISABLE_PROGRESS_VALUE = "1"
-
-
-os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", DISABLE_PROGRESS_VALUE)
-os.environ.setdefault("TQDM_DISABLE", DISABLE_PROGRESS_VALUE)
 
 
 class Transcriber(Protocol):
@@ -162,29 +154,20 @@ class MlxWhisperTranscriber:
     def _transcribe_with_prompt(self, mlx_whisper, audio_path: Path) -> dict:
         """Call mlx-whisper with the app prompt, retrying for older signatures."""
         audio = load_wav_as_float32(audio_path)
-        with suppress_library_output():
-            try:
-                return mlx_whisper.transcribe(
-                    audio,
-                    path_or_hf_repo=self.model,
-                    verbose=False,
-                    initial_prompt=TRANSCRIPTION_INITIAL_PROMPT,
-                )
-            except TypeError:
-                logger.debug("mlx-whisper did not accept initial_prompt; retrying without it.")
-                return mlx_whisper.transcribe(
-                    audio,
-                    path_or_hf_repo=self.model,
-                    verbose=False,
-                )
-
-
-@contextmanager
-def suppress_library_output():
-    """Suppress progress bars from transcription libraries during one call."""
-    stream = io.StringIO()
-    with redirect_stdout(stream), redirect_stderr(stream):
-        yield
+        try:
+            return mlx_whisper.transcribe(
+                audio,
+                path_or_hf_repo=self.model,
+                verbose=False,
+                initial_prompt=TRANSCRIPTION_INITIAL_PROMPT,
+            )
+        except TypeError:
+            logger.debug("mlx-whisper did not accept initial_prompt; retrying without it.")
+            return mlx_whisper.transcribe(
+                audio,
+                path_or_hf_repo=self.model,
+                verbose=False,
+            )
 
 
 def load_wav_as_float32(audio_path: Path):
