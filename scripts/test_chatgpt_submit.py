@@ -16,12 +16,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Submit a stdin transcript segment to ChatGPT.")
     parser.add_argument(
         "--photo-mode",
-        choices=("test", "live"),
-        default="test",
+        choices=("static", "test", "live"),
+        default="static",
         help=(
             "Upload a fixed interview photo with the prompt: "
-            "test uses /Users/flora/interview/test.jpg; live uses /Users/flora/interview/live.jpg. "
-            "Default: test."
+            "static uses /Users/flora/interview/static.jpg; "
+            "test uses /Users/flora/interview/test.jpg; "
+            "live uses /Users/flora/interview/live.jpg. Default: static."
         ),
     )
     args = parser.parse_args()

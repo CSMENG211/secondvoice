@@ -25,6 +25,7 @@ class CameraCaptureError(RuntimeError):
 
 
 def take_photo(
+    output_path: Path = LIVE_INTERVIEW_PHOTO_PATH,
     *,
     camera_name: str = DEFAULT_CAMERA_NAME,
 ) -> Path:
@@ -34,8 +35,8 @@ def take_photo(
     MacBook camera by name. OpenCV is intentionally avoided because macOS camera
     indices can point at Continuity Camera devices such as an iPhone or iPad.
 
-    Photos are always written to ``/Users/flora/interview/live.jpg``, replacing
-    any existing image at that path.
+    Photos are written to ``output_path``, replacing any existing image there.
+    The default path is ``/Users/flora/interview/live.jpg``.
     """
 
     if not shutil.which("imagesnap"):
@@ -45,7 +46,7 @@ def take_photo(
             "  brew install imagesnap"
         )
 
-    path = LIVE_INTERVIEW_PHOTO_PATH
+    path = output_path
     path.parent.mkdir(parents=True, exist_ok=True)
 
     command = ["imagesnap", "-d", camera_name, str(path)]

@@ -22,14 +22,17 @@ from constants import (
     SPEAKER_ENROLLMENT_SILENCE_SECONDS,
     SPEAKER_PROFILE_EMBEDDING_PATH,
     SPEAKER_PROFILE_METADATA_PATH,
+    STATIC_INTERVIEW_PHOTO_PATH,
     STREAM_PROMPT,
     STREAM_SILENCE_SECONDS,
+    TEST_PHOTO_CAPTURE_INITIAL_SECONDS,
+    TEST_PHOTO_CAPTURE_INTERVAL_SECONDS,
     TEST_INTERVIEW_PHOTO_PATH,
 )
 from speaker_id import SpeakerHint, SpeakerIdentifier
 from transcription import LocalTranscriber
 
-PhotoMode = Literal["test", "live"]
+PhotoMode = Literal["static", "test", "live"]
 PhotoSignature = tuple[int, int]
 
 
@@ -46,7 +49,7 @@ class RuntimeOptions:
 
     ask_chatgpt: bool = True
     enroll_me: bool = False
-    photo_mode: PhotoMode | None = "test"
+    photo_mode: PhotoMode | None = "static"
 
 
 @dataclass
@@ -106,7 +109,11 @@ def stream_loop(options: RuntimeOptions) -> None:
             segment_queue,
             stop_event,
         )
-        photo_timer = start_photo_timer(stop_event) if options.photo_mode == "live" else None
+        photo_timer = (
+            start_photo_timer(stop_event, options.photo_mode)
+            if photo_capture_enabled(options.photo_mode)
+            else None
+        )
 
         try:
             transcriber = LocalTranscriber(DEFAULT_TRANSCRIPTION_MODEL)
@@ -157,22 +164,49 @@ def start_stream_recorder(
     return recorder
 
 
-def start_photo_timer(stop_event: threading.Event) -> threading.Thread:
+def start_photo_timer(
+    stop_event: threading.Event,
+    photo_mode: PhotoMode,
+) -> threading.Thread:
     """Start a background timer that captures photos every configured interval."""
+    photo_path, initial_seconds, interval_seconds = photo_capture_settings(photo_mode)
     photo_timer = threading.Thread(
         target=capture_photos_on_interval,
         args=(
             stop_event,
-            LIVE_PHOTO_CAPTURE_INITIAL_SECONDS,
-            LIVE_PHOTO_CAPTURE_INTERVAL_SECONDS,
+            photo_path,
+            initial_seconds,
+            interval_seconds,
         ),
     )
     photo_timer.start()
     return photo_timer
 
 
+def photo_capture_enabled(photo_mode: PhotoMode | None) -> bool:
+    """Return whether the selected photo mode should capture camera photos."""
+    return photo_mode in ("test", "live")
+
+
+def photo_capture_settings(photo_mode: PhotoMode) -> tuple[Path, float, float]:
+    """Return the capture target, initial delay, and interval for a photo mode."""
+    if photo_mode == "test":
+        return (
+            TEST_INTERVIEW_PHOTO_PATH,
+            TEST_PHOTO_CAPTURE_INITIAL_SECONDS,
+            TEST_PHOTO_CAPTURE_INTERVAL_SECONDS,
+        )
+
+    return (
+        LIVE_INTERVIEW_PHOTO_PATH,
+        LIVE_PHOTO_CAPTURE_INITIAL_SECONDS,
+        LIVE_PHOTO_CAPTURE_INTERVAL_SECONDS,
+    )
+
+
 def capture_photos_on_interval(
     stop_event: threading.Event,
+    photo_path: Path,
     initial_seconds: float,
     interval_seconds: float,
 ) -> None:
@@ -184,11 +218,11 @@ def capture_photos_on_interval(
             return
 
         try:
-            photo_path = take_photo()
+            saved_photo_path = take_photo(photo_path)
         except CameraCaptureError as error:
             logger.warning("Photo capture failed: {}", error)
         else:
-            logger.info("Saved interview photo: {}", photo_path)
+            logger.info("Saved interview photo: {}", saved_photo_path)
 
         next_capture_time += interval_seconds
 
@@ -278,6 +312,8 @@ def current_photo_signature(photo_path: Path) -> PhotoSignature | None:
 
 def interview_photo_path(photo_mode: PhotoMode | None) -> Path | None:
     """Return the fixed photo path for the selected photo mode."""
+    if photo_mode == "static":
+        return STATIC_INTERVIEW_PHOTO_PATH
     if photo_mode == "test":
         return TEST_INTERVIEW_PHOTO_PATH
     if photo_mode == "live":
@@ -359,14 +395,15 @@ def print_stream_mode_banner(options: RuntimeOptions) -> None:
             options.photo_mode,
             interview_photo_path(options.photo_mode),
         )
-        if options.photo_mode == "live":
+        if photo_capture_enabled(options.photo_mode):
+            _, initial_seconds, interval_seconds = photo_capture_settings(options.photo_mode)
             logger.info(
                 "Photo capture: first after {:g} min; then every {:g} min",
-                LIVE_PHOTO_CAPTURE_INITIAL_SECONDS / 60,
-                LIVE_PHOTO_CAPTURE_INTERVAL_SECONDS / 60,
+                initial_seconds / 60,
+                interval_seconds / 60,
             )
         else:
-            logger.info("Photo capture: disabled in test mode")
+            logger.info("Photo capture: disabled in static mode")
     else:
         logger.info("Photo upload: disabled")
     logger.info("Recording continues while segments are transcribed")
