@@ -74,7 +74,8 @@ python main.py --photo-mode live
 
 The browser smoke test always submits a fixed two-sum-style prompt and attaches
 `/Users/flora/interview/static.jpg`. On macOS it opens the automation Chrome
-profile first, then runs the ChatGPT browser automation:
+profile when the CDP browser is not already running, then runs the ChatGPT
+browser automation:
 
 ```sh
 python scripts/test_chatgpt_submit.py
@@ -115,7 +116,8 @@ python main.py
 The first time, ChatGPT may ask you to log in. The browser profile is stored at
 `~/.secondvoice/cdp-browser-profile`, so future runs can reuse that login.
 
-SecondVoice connects to a Chrome instance that you start with remote debugging:
+The real stream path connects to an already-running Chrome instance that you
+start with remote debugging:
 
 ```sh
 open -na 'Google Chrome' --args \
@@ -128,6 +130,10 @@ Then run:
 ```sh
 python main.py
 ```
+
+SecondVoice uses one dedicated ChatGPT tab in that profile. The tab is marked
+internally, pinned to dark mode, prefixed with `SecondVoice -` in the tab title,
+and labeled with a small `SecondVoice` badge in the page.
 
 On macOS, your terminal may ask for microphone permission the first time this
 runs.

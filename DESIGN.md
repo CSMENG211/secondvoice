@@ -103,7 +103,7 @@ Command:
 python scripts/test_chatgpt_submit.py
 ```
 
-This script opens the automation Chrome profile on macOS, builds a stream prompt from a fixed two-sum-style transcript, and submits it to ChatGPT. It bypasses microphone recording, local transcription, and interactive transcript entry, so it is useful for testing browser automation and fixed photo upload behavior. It does not accept a photo mode; it always attaches `/Users/flora/interview/static.jpg`.
+This script opens the automation Chrome profile on macOS only when the CDP endpoint is not already running, builds a stream prompt from a fixed two-sum-style transcript, and submits it to ChatGPT. It bypasses microphone recording, local transcription, and interactive transcript entry, so it is useful for testing browser automation and fixed photo upload behavior. It does not accept a photo mode; it always attaches `/Users/flora/interview/static.jpg`.
 
 ### 6. Standalone Camera Capture
 
@@ -276,8 +276,9 @@ Loguru setup.
 Manual browser-submission harness.
 
 - `SMOKE_TEST_TRANSCRIPT`: Fixed two-sum-style transcript used for browser smoke testing.
-- `main()`: Opens the automation browser, builds a prompt from `SMOKE_TEST_TRANSCRIPT`, and submits it to ChatGPT with `/Users/flora/interview/static.jpg`.
-- `open_automation_chrome()`: On macOS, opens Google Chrome with remote debugging and the `~/.secondvoice/cdp-browser-profile` profile.
+- `main()`: Ensures the smoke-test browser path is ready, builds a prompt from `SMOKE_TEST_TRANSCRIPT`, and submits it to ChatGPT with `/Users/flora/interview/static.jpg`.
+- `open_automation_chrome()`: On macOS, opens Google Chrome with remote debugging and the `~/.secondvoice/cdp-browser-profile` profile only when CDP is not already reachable.
+- `cdp_browser_is_running()`: Checks whether the Chrome CDP endpoint is already reachable before launching a browser.
 
 ## Threading Model
 
@@ -295,7 +296,7 @@ Shutdown is coordinated with a shared `threading.Event`. `KeyboardInterrupt` set
 - `playwright`: ChatGPT browser automation.
 - `loguru`: structured console and file logging.
 - `imagesnap`: external macOS command for named-camera still capture.
-- Google Chrome with remote debugging enabled for the default browser submission path.
+- Google Chrome with remote debugging enabled for the default browser submission path. The real stream path expects this CDP browser to already be running; the smoke test opens it on macOS if it is missing.
 
 ## Persistent and Temporary State
 
