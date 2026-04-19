@@ -15,7 +15,7 @@ def main() -> None:
     configure_logging()
     parser = argparse.ArgumentParser(description="Submit a stdin transcript segment to ChatGPT.")
     parser.add_argument(
-        "--browser-mode",
+        "--browser",
         choices=("persistent", "cdp"),
         default="cdp",
         help="Browser automation mode. Default: cdp",

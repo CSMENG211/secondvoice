@@ -20,28 +20,28 @@ def parse_args() -> RuntimeOptions:
         description="Stream mock-interview audio segments to ChatGPT."
     )
     parser.add_argument(
-        "--no-ask-chatgpt",
+        "--no-ask",
         action="store_false",
         dest="ask_chatgpt",
         default=True,
         help="Transcribe without submitting the prompt to ChatGPT.",
     )
     parser.add_argument(
-        "--browser-mode",
+        "--browser",
         choices=("persistent", "cdp"),
         default="cdp",
         help="Browser automation mode for ChatGPT submission. Default: cdp",
     )
     parser.add_argument(
-        "--enroll-me",
+        "--enroll",
         action="store_true",
         help="Record prompted interviewee voice samples and save the voice profile.",
     )
     args = parser.parse_args()
     return RuntimeOptions(
         ask_chatgpt=args.ask_chatgpt,
-        browser_mode=args.browser_mode,
-        enroll_me=args.enroll_me,
+        browser_mode=args.browser,
+        enroll_me=args.enroll,
     )
 
 

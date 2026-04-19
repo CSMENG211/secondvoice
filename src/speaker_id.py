@@ -53,7 +53,7 @@ class SpeakerIdentifier:
             logger.info("Loaded interviewee voice profile.")
         elif log_missing_profile:
             logger.info(
-                "No interviewee voice profile found. Run with --enroll-me to enable voice hints."
+                "No interviewee voice profile found. Run with --enroll to enable voice hints."
             )
 
     @property

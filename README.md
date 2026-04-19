@@ -34,7 +34,7 @@ it to ChatGPT:
 python main.py
 ```
 
-Recording starts automatically when speech begins. After 5 seconds of silence,
+Recording starts automatically when speech begins. After 3 seconds of silence,
 SecondVoice transcribes that segment, sends it to ChatGPT, and continues
 listening. ChatGPT classifies the segment as interviewer or interviewee.
 Interviewer segments are added to the problem context; interviewee segments get
@@ -44,7 +44,7 @@ To only print transcripts and interviewee voice confidence without sending them
 to ChatGPT:
 
 ```sh
-python main.py --no-ask-chatgpt
+python main.py --no-ask
 ```
 
 ### Voice Enrollment
@@ -52,13 +52,13 @@ python main.py --no-ask-chatgpt
 Record your interviewee voice profile:
 
 ```sh
-python main.py --enroll-me
+python main.py --enroll
 ```
 
 SecondVoice will show 10 interview-style sentences. Read each sentence out
 loud using the same microphone and room you plan to use for mock interviews. The
 enrollment is saved locally in `~/.secondvoice` and reused until the next time
-you run `--enroll-me`, which replaces the previous profile.
+you run `--enroll`, which replaces the previous profile.
 
 During streaming, each segment includes an interviewee voice match confidence
 from `0.0` to `1.0` in the ChatGPT prompt. Higher means the audio sounds more
@@ -85,8 +85,8 @@ The first time, ChatGPT may ask you to log in. The browser profile is stored at
 There are two browser modes:
 
 ```sh
-python main.py --browser-mode cdp
-python main.py --browser-mode persistent
+python main.py --browser cdp
+python main.py --browser persistent
 ```
 
 `cdp` is the default and connects to a Chrome instance that you start with
@@ -102,7 +102,7 @@ open -na 'Google Chrome' --args \
 Then run:
 
 ```sh
-python main.py --browser-mode cdp
+python main.py --browser cdp
 ```
 
 On macOS, your terminal may ask for microphone permission the first time this
