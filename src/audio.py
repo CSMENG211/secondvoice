@@ -1,6 +1,7 @@
 from array import array
 from collections.abc import Iterable
 from collections import deque
+from dataclasses import dataclass
 import math
 import queue
 import threading
@@ -23,6 +24,24 @@ from constants import (
 )
 
 SemanticEndpointDetector = Callable[[Path], bool]
+
+
+@dataclass(frozen=True)
+class SemanticEndpointJob:
+    """Snapshot of an in-progress segment to classify off the recorder thread."""
+
+    segment_index: int
+    pause_index: int
+    chunks: list[bytes]
+
+
+@dataclass(frozen=True)
+class SemanticEndpointResult:
+    """Semantic completion result for one queued draft segment snapshot."""
+
+    segment_index: int
+    pause_index: int
+    is_complete: bool
 
 
 def capture_enrollment_utterance(
@@ -99,11 +118,29 @@ def stream_utterance_segments(
     pre_roll = create_pre_roll_buffer()
     recorded_chunks: list[bytes] = []
     silent_blocks = 0
-    semantic_checked_this_pause = False
+    semantic_check_queued_this_pause = False
+    semantic_pause_index = 0
     recording_started = False
     segment_index = 0
     wav_file: wave.Wave_write | None = None
     segment_path: Path | None = None
+    semantic_job_queue: queue.Queue[SemanticEndpointJob | None] | None = None
+    semantic_result_queue: queue.Queue[SemanticEndpointResult] | None = None
+    semantic_worker: threading.Thread | None = None
+
+    if semantic_endpoint_detector is not None:
+        semantic_job_queue = queue.Queue()
+        semantic_result_queue = queue.Queue()
+        semantic_worker = threading.Thread(
+            target=run_semantic_endpoint_worker,
+            args=(
+                output_dir,
+                semantic_job_queue,
+                semantic_result_queue,
+                semantic_endpoint_detector,
+            ),
+        )
+        semantic_worker.start()
 
     def start_segment() -> wave.Wave_write:
         nonlocal segment_index, segment_path
@@ -128,19 +165,64 @@ def stream_utterance_segments(
             wav_file.writeframes(item)
             recorded_chunks.append(item)
 
-    def current_segment_is_complete() -> bool:
-        if semantic_endpoint_detector is None or segment_path is None or not recorded_chunks:
+    def queue_semantic_endpoint_check() -> None:
+        if (
+            semantic_job_queue is None
+            or segment_path is None
+            or not recorded_chunks
+        ):
+            return
+
+        semantic_job_queue.put(
+            SemanticEndpointJob(
+                segment_index=segment_index,
+                pause_index=semantic_pause_index,
+                chunks=list(recorded_chunks),
+            )
+        )
+        logger.info(
+            "Semantic endpoint check queued after {:g}s pause.",
+            semantic_silence_seconds,
+        )
+
+    def handle_semantic_endpoint_results() -> bool:
+        nonlocal recording_started, silent_blocks, semantic_check_queued_this_pause
+        if semantic_result_queue is None:
             return False
 
-        draft_path = segment_path.with_name(f"{segment_path.stem}-semantic-check.wav")
-        try:
-            write_wav_file(draft_path, recorded_chunks)
-            return semantic_endpoint_detector(draft_path)
-        except Exception as error:
-            logger.warning("Semantic endpoint check failed: {}", error)
-            return False
-        finally:
-            draft_path.unlink(missing_ok=True)
+        while True:
+            try:
+                result = semantic_result_queue.get_nowait()
+            except queue.Empty:
+                return False
+
+            if not recording_started:
+                continue
+            if (
+                result.segment_index != segment_index
+                or result.pause_index != semantic_pause_index
+            ):
+                logger.debug(
+                    "Ignoring stale semantic endpoint result for segment {} pause {}.",
+                    result.segment_index,
+                    result.pause_index,
+                )
+                continue
+
+            if not result.is_complete:
+                logger.info("Semantic endpoint check: incomplete; waiting for more speech.")
+                continue
+
+            logger.info(
+                "Audio segment trigger: semantic completion after {:g}s pause.",
+                semantic_silence_seconds,
+            )
+            finish_segment()
+            recording_started = False
+            silent_blocks = 0
+            semantic_check_queued_this_pause = False
+            pre_roll.clear()
+            return True
 
     logger.info("Audio stream active. Waiting for speech...")
     try:
@@ -167,36 +249,29 @@ def stream_utterance_segments(
                             wav_file = start_segment()
                             write_segment_chunks(pre_roll)
                             silent_blocks = 0
-                            semantic_checked_this_pause = False
+                            semantic_check_queued_this_pause = False
                         continue
 
                     if wav_file is not None:
                         write_segment_chunks([chunk])
 
                     if is_speech:
+                        if silent_blocks > 0 or semantic_check_queued_this_pause:
+                            semantic_pause_index += 1
                         silent_blocks = 0
-                        semantic_checked_this_pause = False
+                        semantic_check_queued_this_pause = False
                     else:
                         silent_blocks += 1
 
+                    if handle_semantic_endpoint_results():
+                        continue
+
                     if (
-                        not semantic_checked_this_pause
+                        not semantic_check_queued_this_pause
                         and silent_blocks >= semantic_silence_blocks_needed
                     ):
-                        semantic_checked_this_pause = True
-                        if current_segment_is_complete():
-                            logger.info(
-                                "Audio segment trigger: semantic completion after {:g}s pause.",
-                                semantic_silence_seconds,
-                            )
-                            finish_segment()
-                            recording_started = False
-                            silent_blocks = 0
-                            pre_roll.clear()
-                            continue
-                        logger.info(
-                            "Semantic endpoint check: incomplete; waiting for more speech."
-                        )
+                        semantic_check_queued_this_pause = True
+                        queue_semantic_endpoint_check()
 
                     if silent_blocks >= hard_silence_blocks_needed:
                         logger.info(
@@ -206,13 +281,51 @@ def stream_utterance_segments(
                         finish_segment()
                         recording_started = False
                         silent_blocks = 0
-                        semantic_checked_this_pause = False
+                        semantic_check_queued_this_pause = False
                         pre_roll.clear()
         except Exception as error:
             segment_queue.put(error)
     finally:
         if recording_started:
             finish_segment()
+        if semantic_job_queue is not None:
+            semantic_job_queue.put(None)
+        if semantic_worker is not None:
+            semantic_worker.join()
+
+
+def run_semantic_endpoint_worker(
+    output_dir: Path,
+    job_queue: queue.Queue[SemanticEndpointJob | None],
+    result_queue: queue.Queue[SemanticEndpointResult],
+    semantic_endpoint_detector: SemanticEndpointDetector,
+) -> None:
+    """Run semantic endpoint checks away from the real-time recorder loop."""
+    while True:
+        job = job_queue.get()
+        if job is None:
+            return
+
+        draft_path = output_dir / (
+            f"stream-segment-{job.segment_index:04d}"
+            f"-semantic-check-{job.pause_index:04d}.wav"
+        )
+        try:
+            write_wav_file(draft_path, job.chunks)
+            is_complete = semantic_endpoint_detector(draft_path)
+        except Exception as error:
+            logger.warning("Semantic endpoint check failed: {}", error)
+            is_complete = False
+        finally:
+            draft_path.unlink(missing_ok=True)
+
+        result_queue.put(
+            SemanticEndpointResult(
+                segment_index=job.segment_index,
+                pause_index=job.pause_index,
+                is_complete=is_complete,
+            )
+        )
 
 
 def open_wav_writer(output_path: Path) -> wave.Wave_write:

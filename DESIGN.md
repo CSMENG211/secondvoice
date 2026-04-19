@@ -38,7 +38,7 @@ This is the default path.
 4. `start_stream_recorder()` starts a background thread running `audio.stream_utterance_segments()`.
 5. If photo capture is enabled, `start_photo_timer()` starts a second background thread running `capture_photos_on_interval()`.
 6. The main thread loads `LocalTranscriber`, `SpeakerIdentifier`, and `PhotoUploadTracker`.
-7. During recording, the audio loop checks for a semantic endpoint after a 3-second pause. The detector draft-transcribes the current audio with the shared local Whisper model, sends that transcript to local Ollama `qwen2.5:1.5b`, and cuts the segment early only when Ollama returns `COMPLETE`. If the detector returns incomplete or fails, the hard 10-second silence fallback still cuts the segment.
+7. During recording, the audio loop queues a semantic endpoint job after a 3-second pause. A semantic worker thread draft-transcribes the snapshot with the shared local Whisper model, sends that transcript to local Ollama `qwen2.5:1.5b`, and returns a result. The recorder keeps reading microphone input while that happens and cuts the segment early only when the current, non-stale result is `COMPLETE`. If the detector returns incomplete or fails, the hard 10-second silence fallback still cuts the segment.
 8. For every queued WAV segment, `process_stream_segment()`:
    - Builds a speaker hint from the WAV file.
    - Transcribes the WAV file locally.
@@ -188,7 +188,10 @@ The orchestration layer. It owns high-level runtime paths, threading, prompt con
 Microphone capture and WAV writing.
 
 - `capture_enrollment_utterance(...)`: Records one voice-enrollment sentence using speech-start and silence-stop triggers.
-- `stream_utterance_segments(...)`: Continuously records utterance WAV files, checks semantic completion after a short pause, and pushes completed paths into a queue after semantic completion or hard silence.
+- `SemanticEndpointJob`: Draft chunk snapshot submitted from the recorder thread to the semantic worker.
+- `SemanticEndpointResult`: Completion decision sent from the semantic worker back to the recorder thread.
+- `stream_utterance_segments(...)`: Continuously records utterance WAV files, queues semantic completion checks after a short pause, and pushes completed paths into a queue after semantic completion or hard silence.
+- `run_semantic_endpoint_worker(...)`: Consumes semantic draft jobs, writes temporary draft WAVs, runs the detector, and publishes results without blocking microphone capture.
 - `write_wav_file(output_path, chunks)`: Writes raw chunks into a complete WAV file, used for semantic endpoint draft snapshots.
 - `open_wav_writer(output_path)`: Opens a mono int16 WAV writer using app audio constants.
 - `audio_blocksize()`: Converts chunk duration into sample count.
@@ -306,9 +309,9 @@ Stream mode uses the main thread for transcription, voice matching, prompt const
 
 Communication between the recorder and main thread is via `queue.Queue[Path | Exception]`. Completed segments are queued as `Path` objects. Recorder failures are queued as exceptions and re-raised by `next_stream_segment()`.
 
-Endpointing is hybrid. The recorder checks a semantic endpoint detector after `STREAM_SEMANTIC_SILENCE_SECONDS`, currently 3 seconds. It writes a draft WAV snapshot of the current segment, transcribes that draft locally, and asks Ollama `qwen2.5:1.5b` whether the transcript is `COMPLETE` or `INCOMPLETE` using the same prompt benchmarked by `scripts/test_endpoint_detector.py`.
+Endpointing is hybrid. The recorder queues a semantic endpoint job after `STREAM_SEMANTIC_SILENCE_SECONDS`, currently 3 seconds, but it does not run Whisper or Ollama on the recorder thread. The job contains a copy of the current chunk snapshot plus segment and pause IDs. A semantic worker thread writes a draft WAV snapshot, transcribes that draft locally, and asks Ollama `qwen2.5:1.5b` whether the transcript is `COMPLETE` or `INCOMPLETE` using the same prompt benchmarked by `scripts/test_endpoint_detector.py`.
 
-The detector is intentionally conservative at the integration boundary: if the transcriber is not loaded yet, Ollama is not reachable, the draft transcript is empty, or the model returns anything other than `COMPLETE`, the recorder keeps listening. If no semantic endpoint is accepted, the recorder falls back to `STREAM_HARD_SILENCE_SECONDS`, currently 10 seconds, and cuts the segment.
+The recorder polls semantic results without blocking microphone reads. It accepts only results whose segment and pause IDs still match the current in-progress segment, so stale `COMPLETE` results are ignored if the speaker resumed talking or the hard fallback already cut the segment. The detector is intentionally conservative at the integration boundary: if the transcriber is not loaded yet, Ollama is not reachable, the draft transcript is empty, or the model returns anything other than `COMPLETE`, the recorder keeps listening. If no semantic endpoint is accepted, the recorder falls back to `STREAM_HARD_SILENCE_SECONDS`, currently 10 seconds, and cuts the segment.
 
 Shutdown is coordinated with a shared `threading.Event`. `KeyboardInterrupt` sets the event, joins background threads, and logs completion.
 

@@ -74,10 +74,12 @@ python main.py
 ```
 
 Recording starts automatically when speech begins. After 3 seconds of silence,
-SecondVoice draft-transcribes the current audio and asks local Ollama
-`qwen2.5:1.5b` whether the thought is complete. If Ollama returns `COMPLETE`,
-the segment ends early. If it returns `INCOMPLETE`, is unavailable, or returns
-anything unexpected, SecondVoice keeps listening until the 10-second hard
+SecondVoice queues a draft semantic check while microphone capture continues.
+A worker thread draft-transcribes the current audio and asks local Ollama
+`qwen2.5:1.5b` whether the thought is complete. If Ollama returns `COMPLETE`
+for the current pause, the segment ends early. If it returns `INCOMPLETE`, is
+unavailable, returns anything unexpected, or the result becomes stale because
+you resumed speaking, SecondVoice keeps listening until the 10-second hard
 silence fallback. Once a segment ends, SecondVoice transcribes that segment,
 sends it to ChatGPT, and continues listening. ChatGPT classifies the segment as
 interviewer or interviewee. Interviewer segments are added to the problem
