@@ -315,6 +315,60 @@ The recorder polls semantic results without blocking microphone reads. It accept
 
 Shutdown is coordinated with a shared `threading.Event`. `KeyboardInterrupt` sets the event, joins background threads, and logs completion.
 
+## Audio Queue Design
+
+Audio recording has two separate queue-based handoffs. They both involve the recorder thread, but they solve different problems.
+
+### Completed Segment Queue
+
+The completed segment queue connects the recorder thread to the main app thread.
+
+```text
+Recorder thread
+  captures microphone audio
+  decides a segment is finished
+  closes the segment WAV
+  puts the WAV path into segment_queue
+        |
+        v
+Main app thread
+  reads segment_queue
+  runs final transcription
+  runs speaker matching
+  prints or submits the segment
+```
+
+This queue carries finished work. Its items are either completed WAV paths or recorder exceptions. The recorder should not do final transcription, speaker matching, prompt construction, or browser automation because those operations are slower than real-time microphone capture.
+
+### Semantic Endpoint Queues
+
+Semantic endpointing uses a second queue pair inside the audio layer.
+
+```text
+Recorder thread
+  keeps reading microphone audio
+  after a 3-second pause, copies the current chunks
+  puts SemanticEndpointJob into semantic_job_queue
+        |
+        v
+Semantic worker thread
+  writes a temporary draft WAV
+  runs Whisper draft transcription
+  asks Ollama COMPLETE vs INCOMPLETE
+  puts SemanticEndpointResult into semantic_result_queue
+        |
+        v
+Recorder thread
+  polls semantic_result_queue without blocking
+  cuts the segment only if the current result is COMPLETE
+```
+
+This queue pair carries draft work. It exists so Whisper and Ollama latency cannot block `sounddevice.RawInputStream.read()`. Blocking the recorder thread during endpoint detection can let the microphone input buffer overflow, which may drop audio samples.
+
+Each semantic job/result includes a `segment_index` and `pause_index`. The recorder accepts a result only when both IDs still match the current in-progress segment. This prevents stale results from cutting audio after the speaker resumes talking, after a newer pause begins, or after the hard fallback has already ended the segment.
+
+The semantic worker never mutates recorder-owned state. It does not close segment files, clear buffers, or decide final boundaries directly. The recorder remains the single owner of mutable recording state and the only code path that calls `finish_segment()`.
+
 ## External Dependencies
 
 - `sounddevice`: microphone input.
