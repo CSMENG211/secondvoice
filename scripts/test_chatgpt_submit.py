@@ -1,6 +1,8 @@
 import platform
 import subprocess
 import sys
+from urllib.error import URLError
+from urllib.request import urlopen
 from pathlib import Path
 from time import sleep
 
@@ -9,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from app import build_stream_prompt
 from browser import submit_to_chatgpt
-from constants import STATIC_INTERVIEW_PHOTO_PATH
+from constants import DEFAULT_CDP_URL, STATIC_INTERVIEW_PHOTO_PATH
 from logging_config import configure_logging
 
 
@@ -37,6 +39,9 @@ def main() -> None:
 
 def open_automation_chrome() -> None:
     """Open the Chrome profile that Playwright connects to over CDP."""
+    if cdp_browser_is_running():
+        return
+
     if platform.system() != "Darwin":
         return
 
@@ -55,6 +60,15 @@ def open_automation_chrome() -> None:
         stderr=subprocess.DEVNULL,
     )
     sleep(2)
+
+
+def cdp_browser_is_running() -> bool:
+    """Return whether the Chrome CDP endpoint is already reachable."""
+    try:
+        with urlopen(f"{DEFAULT_CDP_URL}/json/version", timeout=0.5):
+            return True
+    except (OSError, URLError):
+        return False
 
 
 if __name__ == "__main__":
