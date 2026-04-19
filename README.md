@@ -38,8 +38,11 @@ it to ChatGPT:
 python main.py
 ```
 
-Recording starts automatically when speech begins. After 10 seconds of silence,
-SecondVoice transcribes that segment, sends it to ChatGPT, and continues
+Recording starts automatically when speech begins. After 3 seconds of silence,
+SecondVoice checks whether the current segment is semantically complete. The
+semantic detector is currently a placeholder and always waits for more audio,
+so the effective fallback trigger remains 10 seconds of silence. Once a segment
+ends, SecondVoice transcribes that segment, sends it to ChatGPT, and continues
 listening. ChatGPT classifies the segment as interviewer or interviewee.
 Interviewer segments are added to the problem context; interviewee segments get
 an ideal response and evaluation against that ideal.

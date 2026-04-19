@@ -22,8 +22,9 @@ from constants import (
     SPEAKER_ENROLLMENT_SILENCE_SECONDS,
     SPEAKER_PROFILE_EMBEDDING_PATH,
     SPEAKER_PROFILE_METADATA_PATH,
+    STREAM_HARD_SILENCE_SECONDS,
     STREAM_PROMPT,
-    STREAM_SILENCE_SECONDS,
+    STREAM_SEMANTIC_SILENCE_SECONDS,
     TEST_PHOTO_CAPTURE_INITIAL_SECONDS,
     TEST_PHOTO_CAPTURE_INTERVAL_SECONDS,
     TEST_INTERVIEW_PHOTO_PATH,
@@ -155,12 +156,20 @@ def start_stream_recorder(
             output_dir,
             segment_queue,
             stop_event,
-            STREAM_SILENCE_SECONDS,
+            STREAM_HARD_SILENCE_SECONDS,
             DEFAULT_SILENCE_THRESHOLD,
+            STREAM_SEMANTIC_SILENCE_SECONDS,
+            stream_segment_is_semantically_complete,
         ),
     )
     recorder.start()
     return recorder
+
+
+def stream_segment_is_semantically_complete(audio_path: Path) -> bool:
+    """Return whether a draft stream segment is semantically complete."""
+    logger.debug("Semantic endpoint check disabled for now: {}", audio_path)
+    return False
 
 
 def start_photo_timer(
@@ -383,7 +392,11 @@ def print_stream_mode_banner(options: RuntimeOptions) -> None:
     """Print the active stream-mode trigger settings."""
     logger.info("Stream mode is active.")
     logger.info("Audio start trigger: speech begins")
-    logger.info("Segment trigger: {:g}s of silence", STREAM_SILENCE_SECONDS)
+    logger.info(
+        "Semantic endpoint check: {:g}s pause (placeholder currently waits)",
+        STREAM_SEMANTIC_SILENCE_SECONDS,
+    )
+    logger.info("Fallback segment trigger: {:g}s silence", STREAM_HARD_SILENCE_SECONDS)
     if options.photo_mode != "none":
         logger.info(
             "Photo upload: {} mode; using {}",

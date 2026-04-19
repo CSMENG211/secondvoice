@@ -38,7 +38,8 @@ This is the default path.
 4. `start_stream_recorder()` starts a background thread running `audio.stream_utterance_segments()`.
 5. If photo capture is enabled, `start_photo_timer()` starts a second background thread running `capture_photos_on_interval()`.
 6. The main thread loads `LocalTranscriber`, `SpeakerIdentifier`, and `PhotoUploadTracker`.
-7. For every queued WAV segment, `process_stream_segment()`:
+7. During recording, the audio loop checks for a semantic endpoint after a 3-second pause. The semantic detector is currently a placeholder that always returns incomplete, so the hard 10-second silence fallback still determines actual segment cuts.
+8. For every queued WAV segment, `process_stream_segment()`:
    - Builds a speaker hint from the WAV file.
    - Transcribes the WAV file locally.
    - Deletes the temporary WAV segment.
@@ -46,7 +47,7 @@ This is the default path.
    - Builds a ChatGPT prompt.
    - Attaches a photo only when the selected photo exists and changed since the last successful upload.
    - Submits the prompt through Playwright browser automation.
-8. `Ctrl+C` stops the recorder and photo timer threads cleanly.
+9. `Ctrl+C` stops the recorder and photo timer threads cleanly.
 
 The first successful ChatGPT submission includes the full `STREAM_PROMPT`, which defines SecondVoice's behavior. Later submissions include only the segment prompt so the current ChatGPT conversation can maintain context.
 
@@ -165,6 +166,7 @@ The orchestration layer. It owns high-level runtime paths, threading, prompt con
 - `enroll_interviewee_voice()`: Records prompted enrollment clips and persists a voice profile.
 - `stream_loop(options)`: Runs the continuous capture/transcribe/submit loop.
 - `start_stream_recorder(output_dir, segment_queue, stop_event)`: Starts audio recording in a background thread.
+- `stream_segment_is_semantically_complete(audio_path)`: Placeholder semantic endpoint detector; currently always returns `False`.
 - `start_photo_timer(stop_event, photo_mode)`: Starts periodic photo capture in a background thread.
 - `photo_capture_settings(photo_mode)`: Maps `test` and `live` modes to path, initial delay, and interval.
 - `capture_photos_on_interval(stop_event, photo_path, initial_seconds, interval_seconds)`: Captures photos until stopped.
@@ -187,7 +189,8 @@ The orchestration layer. It owns high-level runtime paths, threading, prompt con
 Microphone capture and WAV writing.
 
 - `capture_enrollment_utterance(...)`: Records one voice-enrollment sentence using speech-start and silence-stop triggers.
-- `stream_utterance_segments(...)`: Continuously records utterance WAV files, pushing completed paths into a queue.
+- `stream_utterance_segments(...)`: Continuously records utterance WAV files, checks semantic completion after a short pause, and pushes completed paths into a queue after semantic completion or hard silence.
+- `write_wav_file(output_path, chunks)`: Writes raw chunks into a complete WAV file, used for semantic endpoint draft snapshots.
 - `open_wav_writer(output_path)`: Opens a mono int16 WAV writer using app audio constants.
 - `audio_blocksize()`: Converts chunk duration into sample count.
 - `block_count_for_seconds(seconds)`: Converts seconds into audio chunk count.
@@ -285,6 +288,8 @@ Manual browser-submission harness.
 Stream mode uses the main thread for transcription, voice matching, prompt construction, and browser submission. Audio capture runs in a background thread so recording can continue while segments are processed. Photo capture can run in a second background thread for `test` and `live` modes.
 
 Communication between the recorder and main thread is via `queue.Queue[Path | Exception]`. Completed segments are queued as `Path` objects. Recorder failures are queued as exceptions and re-raised by `next_stream_segment()`.
+
+Endpointing is hybrid. The recorder checks a semantic endpoint detector after `STREAM_SEMANTIC_SILENCE_SECONDS`, currently 3 seconds. That detector is intentionally stubbed to always return incomplete for now. If no semantic endpoint is accepted, the recorder falls back to `STREAM_HARD_SILENCE_SECONDS`, currently 10 seconds, and cuts the segment.
 
 Shutdown is coordinated with a shared `threading.Event`. `KeyboardInterrupt` sets the event, joins background threads, and logs completion.
 
