@@ -390,12 +390,14 @@ def print_speaker_hint(speaker_hint: SpeakerHint) -> None:
 def print_stream_mode_banner(options: RuntimeOptions) -> None:
     """Print the active stream-mode trigger settings."""
     logger.info("Stream mode is active.")
-    logger.info("Audio start trigger: speech begins")
     logger.info(
+        "Audio segments end after semantic completion or {:g}s silence fallback.",
+        STREAM_HARD_SILENCE_SECONDS,
+    )
+    logger.debug(
         "Semantic endpoint check: {:g}s pause via local Ollama qwen2.5:1.5b",
         STREAM_SEMANTIC_SILENCE_SECONDS,
     )
-    logger.info("Fallback segment trigger: {:g}s silence", STREAM_HARD_SILENCE_SECONDS)
     if options.photo_mode != "none":
         logger.info(
             "Photo upload: {} mode; using {}",
@@ -410,14 +412,13 @@ def print_stream_mode_banner(options: RuntimeOptions) -> None:
         )
     else:
         logger.info("Photo upload: disabled")
-        logger.info("Photo capture: disabled")
-    logger.info("Recording continues while segments are transcribed")
+        logger.debug("Photo capture: disabled")
+    logger.debug("Recording continues while segments are transcribed")
     if options.ask_chatgpt:
         logger.info("ChatGPT submission: enabled")
-        logger.info("Segment role detection: delegated to ChatGPT")
+        logger.debug("Segment role detection: delegated to ChatGPT")
     else:
         logger.info("ChatGPT submission: disabled")
-        logger.info("Echo output: transcript plus interviewee voice confidence")
     logger.info("Press Ctrl+C to stop.")
 
 

@@ -180,7 +180,7 @@ def stream_utterance_segments(
                 chunks=list(recorded_chunks),
             )
         )
-        logger.info(
+        logger.debug(
             "Semantic endpoint check queued after {:g}s pause.",
             semantic_silence_seconds,
         )
@@ -210,7 +210,7 @@ def stream_utterance_segments(
                 continue
 
             if not result.is_complete:
-                logger.info("Semantic endpoint check: incomplete; waiting for more speech.")
+                logger.debug("Semantic endpoint check: incomplete; waiting for more speech.")
                 continue
 
             logger.info(
@@ -244,7 +244,7 @@ def stream_utterance_segments(
                     if not recording_started:
                         pre_roll.append(chunk)
                         if is_speech:
-                            logger.info("Utterance started. Capturing audio...")
+                            logger.debug("Utterance started. Capturing audio...")
                             recording_started = True
                             wav_file = start_segment()
                             write_segment_chunks(pre_roll)

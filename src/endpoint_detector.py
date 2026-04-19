@@ -57,7 +57,7 @@ class OllamaSemanticEndpointDetector:
             logger.debug("Semantic endpoint check skipped; transcriber is not ready.")
             return False
 
-        transcript = transcriber.transcribe(audio_path)
+        transcript = transcriber.transcribe(audio_path, log_progress=False)
         if not transcript:
             logger.debug("Semantic endpoint check skipped; draft transcript is empty.")
             return False
@@ -71,7 +71,7 @@ class OllamaSemanticEndpointDetector:
             logger.warning("Semantic endpoint check failed: {}", error)
             return False
 
-        logger.info(
+        logger.debug(
             "Semantic endpoint check: {} ({:.1f} ms) for draft: {}",
             label,
             duration_ms,

@@ -20,10 +20,11 @@ class LocalTranscriber:
         self._lock = threading.Lock()
         logger.info("Model loaded.")
 
-    def transcribe(self, audio_path: Path) -> str:
+    def transcribe(self, audio_path: Path, *, log_progress: bool = True) -> str:
         """Transcribe a WAV file and return plain text."""
         with self._lock:
-            logger.info("Decoding audio...")
+            if log_progress:
+                logger.info("Decoding audio...")
             segments, _ = self.model.transcribe(str(audio_path), beam_size=5)
 
             transcript_parts = []
@@ -31,7 +32,9 @@ class LocalTranscriber:
                 text = segment.text.strip()
                 if text:
                     transcript_parts.append(text)
-                    logger.info("Partial: {}", text)
+                    if log_progress:
+                        logger.debug("Transcribed segment: {}", text)
 
-            logger.info("Done decoding audio.")
+            if log_progress:
+                logger.debug("Done decoding audio.")
             return " ".join(transcript_parts).strip()
