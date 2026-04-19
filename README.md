@@ -58,9 +58,17 @@ python main.py
 By default, SecondVoice streams continuously and submits transcript segments to
 ChatGPT.
 
-SecondVoice uses a fast Whisper model for draft semantic endpoint checks and a
-stronger Whisper model for final completed-segment transcription. These are
-configured in `src/constants.py`.
+SecondVoice uses a fast `faster-whisper` model for draft semantic endpoint
+checks and an `mlx-whisper` model for final completed-segment transcription on
+Apple Silicon. These backends and model names are configured in
+`src/constants.py`.
+
+To compare transcription backends on a saved WAV file:
+
+```sh
+python scripts/benchmark_transcriber.py /path/to/sample.wav
+python scripts/benchmark_transcriber.py --backend faster-whisper --model small.en /path/to/sample.wav
+```
 
 Logs are written to `python.log` in the current working directory.
 

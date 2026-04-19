@@ -7,7 +7,7 @@ from urllib.request import Request, urlopen
 
 from loguru import logger
 
-from transcription import LocalTranscriber
+from transcription import Transcriber
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 DEFAULT_ENDPOINT_MODEL = "qwen2.5:1.5b"
@@ -42,10 +42,10 @@ class OllamaSemanticEndpointDetector:
 
     def __init__(self, model: str = DEFAULT_ENDPOINT_MODEL) -> None:
         self.model = model
-        self._transcriber: LocalTranscriber | None = None
+        self._transcriber: Transcriber | None = None
         self._lock = threading.Lock()
 
-    def set_transcriber(self, transcriber: LocalTranscriber) -> None:
+    def set_transcriber(self, transcriber: Transcriber) -> None:
         """Attach the shared transcriber once Whisper has loaded."""
         with self._lock:
             self._transcriber = transcriber
@@ -79,7 +79,7 @@ class OllamaSemanticEndpointDetector:
         )
         return label == ENDPOINT_LABEL_COMPLETE
 
-    def _current_transcriber(self) -> LocalTranscriber | None:
+    def _current_transcriber(self) -> Transcriber | None:
         with self._lock:
             return self._transcriber
 

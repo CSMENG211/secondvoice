@@ -37,7 +37,7 @@ This is the default path.
 3. `stream_loop()` creates a temporary directory for WAV segments.
 4. `start_stream_recorder()` starts a background thread running `audio.stream_utterance_segments()`.
 5. If photo capture is enabled, `start_photo_timer()` starts a second background thread running `capture_photos_on_interval()`.
-6. The main thread loads `LocalTranscriber`, `SpeakerIdentifier`, and `PhotoUploadTracker`.
+6. The main thread loads the configured endpoint and final transcribers, `SpeakerIdentifier`, and `PhotoUploadTracker`.
 7. During recording, the audio loop queues a semantic endpoint job after a 3-second pause. A semantic worker thread draft-transcribes the snapshot with the fast endpoint Whisper model, sends that transcript to local Ollama `qwen2.5:1.5b`, and returns a result. The recorder keeps reading microphone input while that happens and cuts the segment early only when the current, non-stale result is `COMPLETE`. If the detector returns incomplete or fails, the hard 10-second silence fallback still cuts the segment.
 8. For every queued WAV segment, `process_stream_segment()`:
    - Builds a speaker hint from the WAV file.
@@ -124,7 +124,7 @@ Microphone
   -> temporary WAV segment
   -> app.process_stream_segment()
   -> speaker_id.SpeakerIdentifier.match()
-  -> transcription.LocalTranscriber.transcribe()
+  -> transcription.Transcriber.transcribe()
   -> app.build_stream_prompt()
   -> optional photo selected by app.next_photo_upload()
   -> browser.submit_to_chatgpt()
@@ -205,17 +205,20 @@ Microphone capture and WAV writing.
 
 Local semantic endpointing through Ollama.
 
-- `OllamaSemanticEndpointDetector`: Holds the configured Ollama model name and the fast endpoint `LocalTranscriber`. Until the transcriber is attached, checks conservatively return incomplete.
+- `OllamaSemanticEndpointDetector`: Holds the configured Ollama model name and the fast endpoint `Transcriber`. Until the transcriber is attached, checks conservatively return incomplete.
 - `OllamaSemanticEndpointDetector.set_transcriber(transcriber)`: Attaches the loaded Whisper transcriber after app startup.
 - `OllamaSemanticEndpointDetector.is_complete(audio_path)`: Transcribes a draft WAV snapshot, classifies the transcript through Ollama, logs the result, and returns `True` only for `COMPLETE`.
 - `classify_endpoint_transcript(transcript, model, url, timeout_seconds)`: Sends the shared endpoint prompt to the Ollama chat API and returns the normalized label plus latency.
 
 ### `src/transcription.py`
 
-Local Whisper transcription.
+Local transcription backend interface and implementations.
 
-- `LocalTranscriber.__init__(model)`: Loads a `faster-whisper` `WhisperModel`.
-- `LocalTranscriber.transcribe(audio_path)`: Transcribes a WAV file with a coding-interview and system-design initial prompt, logs partial segments, and returns joined plain text. Calls are serialized per transcriber instance. Stream mode uses a fast endpoint transcriber for draft semantic checks and a stronger final transcriber for completed segments.
+- `Transcriber`: Protocol shared by transcription backends.
+- `create_transcriber(backend, model)`: Factory that returns the configured backend implementation.
+- `FasterWhisperTranscriber`: Loads and runs `faster-whisper`, currently used for fast draft endpoint transcription.
+- `MlxWhisperTranscriber`: Runs `mlx-whisper`, currently used for final completed-segment transcription on Apple Silicon.
+- `transcribe(audio_path)`: Backend implementations transcribe a WAV file with the coding-interview and system-design initial prompt where supported, then return joined plain text. Calls are serialized per transcriber instance.
 
 ### `src/speaker_id.py`
 
@@ -273,7 +276,7 @@ Important groups:
 
 - Audio shape: sample rate, channels, sample width, chunk size, pre-roll.
 - Segmentation: silence duration and RMS threshold.
-- Transcription: fast endpoint and stronger final Whisper models, plus separate coding-interview and system-design vocabulary prompts for terms like BFS, DFS, topological sort, idempotency, relational databases, consistency, queues, reliability, and common architecture phrases.
+- Transcription: configurable endpoint and final Whisper backends/models, plus separate coding-interview and system-design vocabulary prompts for terms like BFS, DFS, topological sort, idempotency, relational databases, consistency, queues, reliability, and common architecture phrases.
 - Photo paths and capture intervals.
 - ChatGPT browser URL and CDP URL.
 - Speaker-profile paths, model source, threshold, and enrollment prompts.
@@ -303,13 +306,20 @@ Ollama semantic-endpoint benchmark harness.
 - `run_model_benchmark(model)`: Prints per-case predictions and summary latency/error counts.
 - `classify(model, transcript)`: Calls the shared `endpoint_detector.classify_endpoint_transcript()` helper so benchmarks and runtime use the same prompt and Ollama request shape.
 
+### `scripts/benchmark_transcriber.py`
+
+Local transcription backend benchmark harness.
+
+- `main()`: Creates one configured transcriber and runs it against one or more WAV files.
+- `parse_args()`: Accepts audio paths plus optional backend/model overrides so `faster-whisper` and `mlx-whisper` models can be compared without changing the live app.
+
 ## Threading Model
 
 Stream mode uses the main thread for transcription, voice matching, prompt construction, and browser submission. Audio capture runs in a background thread so recording can continue while segments are processed. Photo capture can run in a second background thread for `test` and `live` modes.
 
 Communication between the recorder and main thread is via `queue.Queue[Path | Exception]`. Completed segments are queued as `Path` objects. Recorder failures are queued as exceptions and re-raised by `next_stream_segment()`.
 
-Endpointing is hybrid. The recorder queues a semantic endpoint job after `STREAM_SEMANTIC_SILENCE_SECONDS`, currently 3 seconds, but it does not run Whisper or Ollama on the recorder thread. The job contains a copy of the current chunk snapshot plus segment and pause IDs. A semantic worker thread writes a draft WAV snapshot, transcribes that draft locally with the fast endpoint Whisper model, and asks Ollama `qwen2.5:1.5b` whether the transcript is `COMPLETE` or `INCOMPLETE` using the same prompt benchmarked by `scripts/test_endpoint_detector.py`.
+Endpointing is hybrid. The recorder queues a semantic endpoint job after `STREAM_SEMANTIC_SILENCE_SECONDS`, currently 3 seconds, but it does not run Whisper or Ollama on the recorder thread. The job contains a copy of the current chunk snapshot plus segment and pause IDs. A semantic worker thread writes a draft WAV snapshot, transcribes that draft locally with the fast endpoint transcription backend, and asks Ollama `qwen2.5:1.5b` whether the transcript is `COMPLETE` or `INCOMPLETE` using the same prompt benchmarked by `scripts/test_endpoint_detector.py`.
 
 The recorder polls semantic results without blocking microphone reads. It accepts only results whose segment and pause IDs still match the current in-progress segment, so stale `COMPLETE` results are ignored if the speaker resumed talking or the hard fallback already cut the segment. The detector is intentionally conservative at the integration boundary: if the transcriber is not loaded yet, Ollama is not reachable, the draft transcript is empty, or the model returns anything other than `COMPLETE`, the recorder keeps listening. If no semantic endpoint is accepted, the recorder falls back to `STREAM_HARD_SILENCE_SECONDS`, currently 10 seconds, and cuts the segment.
 
@@ -368,6 +378,40 @@ This queue pair carries draft work. It exists so Whisper and Ollama latency cann
 Each semantic job/result includes a `segment_index` and `pause_index`. The recorder accepts a result only when both IDs still match the current in-progress segment. This prevents stale results from cutting audio after the speaker resumes talking, after a newer pause begins, or after the hard fallback has already ended the segment.
 
 This means SecondVoice may sometimes avoid cutting a segment that was complete at an earlier pause. For example, if a semantic job is queued after `"I would sort the array first"` but the speaker resumes with `"then I would use two pointers"` before the worker returns, the old result is ignored even if it says `COMPLETE`. The tradeoff is intentional: a slightly later cut or larger segment is better than letting stale information split resumed speech in the middle of a continuing answer.
+
+### Semantic Timeline Examples
+
+If the speaker stays silent after the first semantic check, an early cut can happen before the 10-second fallback:
+
+```text
+t+0.0  silence starts
+t+3.0  semantic job queued for segment 5, pause 10
+t+3.5  semantic result returns COMPLETE for segment 5, pause 10
+t+3.5  recorder accepts the current result and cuts the segment
+```
+
+If the speaker resumes before the semantic result returns, the old result is stale and ignored:
+
+```text
+t+0.0  silence starts
+t+3.0  semantic job queued for segment 5, pause 10
+t+3.1  speaker resumes; recorder increments pause_index to 11
+t+4.0  old semantic result returns COMPLETE for segment 5, pause 10
+t+4.0  recorder ignores the stale result
+```
+
+If the speaker pauses again after resuming, the recorder queues a new semantic check for the new pause:
+
+```text
+t+0.0  first silence starts
+t+3.0  semantic job queued for segment 5, pause 10
+t+3.1  speaker resumes; recorder increments pause_index to 11
+t+4.0  old result for pause 10 is ignored as stale
+t+5.0  second silence starts
+t+8.0  semantic job queued for segment 5, pause 11
+```
+
+The 10-second hard fallback is also counted from the current continuous silence. In the last example, if no current semantic result is accepted, fallback would happen around `t+15.0`, not `t+10.0`, because speech resumed at `t+3.1`.
 
 The semantic worker never mutates recorder-owned state. It does not close segment files, clear buffers, or decide final boundaries directly. The recorder remains the single owner of mutable recording state and the only code path that calls `finish_segment()`.
 

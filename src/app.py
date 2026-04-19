@@ -13,7 +13,9 @@ from browser import submit_to_chatgpt
 from camera import CameraCaptureError, take_photo
 from constants import (
     DEFAULT_SILENCE_THRESHOLD,
+    DEFAULT_ENDPOINT_TRANSCRIPTION_BACKEND,
     DEFAULT_ENDPOINT_TRANSCRIPTION_MODEL,
+    DEFAULT_FINAL_TRANSCRIPTION_BACKEND,
     DEFAULT_FINAL_TRANSCRIPTION_MODEL,
     LIVE_PHOTO_CAPTURE_INITIAL_SECONDS,
     LIVE_PHOTO_CAPTURE_INTERVAL_SECONDS,
@@ -32,7 +34,7 @@ from constants import (
 )
 from endpoint_detector import OllamaSemanticEndpointDetector
 from speaker_id import SpeakerHint, SpeakerIdentifier
-from transcription import LocalTranscriber
+from transcription import Transcriber, create_transcriber
 
 PhotoMode = Literal["none", "test", "live"]
 PhotoSignature = tuple[int, int]
@@ -120,8 +122,14 @@ def stream_loop(options: RuntimeOptions) -> None:
         )
 
         try:
-            endpoint_transcriber = LocalTranscriber(DEFAULT_ENDPOINT_TRANSCRIPTION_MODEL)
-            final_transcriber = LocalTranscriber(DEFAULT_FINAL_TRANSCRIPTION_MODEL)
+            endpoint_transcriber = create_transcriber(
+                DEFAULT_ENDPOINT_TRANSCRIPTION_BACKEND,
+                DEFAULT_ENDPOINT_TRANSCRIPTION_MODEL,
+            )
+            final_transcriber = create_transcriber(
+                DEFAULT_FINAL_TRANSCRIPTION_BACKEND,
+                DEFAULT_FINAL_TRANSCRIPTION_MODEL,
+            )
             semantic_endpoint_detector.set_transcriber(endpoint_transcriber)
             speaker_identifier = SpeakerIdentifier()
             photo_tracker = PhotoUploadTracker()
@@ -249,7 +257,7 @@ def next_stream_segment(segment_queue: queue.Queue[Path | Exception]) -> Path | 
 
 def process_stream_segment(
     audio_path: Path,
-    transcriber: LocalTranscriber,
+    transcriber: Transcriber,
     speaker_identifier: SpeakerIdentifier,
     options: RuntimeOptions,
     include_mode_prompt: bool,
@@ -400,8 +408,16 @@ def print_stream_mode_banner(options: RuntimeOptions) -> None:
         "Semantic endpoint check: {:g}s pause via local Ollama qwen2.5:1.5b",
         STREAM_SEMANTIC_SILENCE_SECONDS,
     )
-    logger.info("Endpoint transcription model: {}", DEFAULT_ENDPOINT_TRANSCRIPTION_MODEL)
-    logger.info("Final transcription model: {}", DEFAULT_FINAL_TRANSCRIPTION_MODEL)
+    logger.info(
+        "Endpoint transcription: {} {}",
+        DEFAULT_ENDPOINT_TRANSCRIPTION_BACKEND,
+        DEFAULT_ENDPOINT_TRANSCRIPTION_MODEL,
+    )
+    logger.info(
+        "Final transcription: {} {}",
+        DEFAULT_FINAL_TRANSCRIPTION_BACKEND,
+        DEFAULT_FINAL_TRANSCRIPTION_MODEL,
+    )
     if options.photo_mode != "none":
         logger.info(
             "Photo upload: {} mode; using {}",
