@@ -13,25 +13,17 @@ from audio.constants import (
 )
 from audio.wav import open_wav_writer
 
-AUDIO_ENHANCEMENT_OFF = "off"
-AUDIO_ENHANCEMENT_SPECTRAL_GATE = "spectral-gate"
-
-
 @dataclass(frozen=True)
 class AudioEnhancementConfig:
     """Configuration for optional transcription-time audio enhancement."""
 
-    mode: str = AUDIO_ENHANCEMENT_SPECTRAL_GATE
+    enabled: bool = True
     prop_decrease: float = 0.85
     n_fft: int = 512
     win_length: int = 512
     hop_length: int = 128
     time_mask_smooth_ms: int = 50
     freq_mask_smooth_hz: int = 500
-
-    @property
-    def enabled(self) -> bool:
-        return self.mode != AUDIO_ENHANCEMENT_OFF
 
 
 def enhance_wav(
@@ -42,9 +34,6 @@ def enhance_wav(
     """Write an enhanced WAV for transcription, returning raw input on fallback."""
     if not config.enabled:
         return input_path
-
-    if config.mode != AUDIO_ENHANCEMENT_SPECTRAL_GATE:
-        raise ValueError(f"Unsupported audio enhancement mode: {config.mode!r}")
 
     started = time.perf_counter()
     try:

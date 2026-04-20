@@ -77,7 +77,7 @@ Run without photo capture or upload:
 Compare transcription with raw, unenhanced audio:
 
 ```sh
-.venv/bin/python main.py --no-ask --audio-enhancement off
+.venv/bin/python main.py --no-ask --no-audio-enhancement
 ```
 
 Record an interviewee voice profile:

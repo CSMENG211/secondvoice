@@ -6,7 +6,6 @@ from typing import Protocol
 from loguru import logger
 
 from automation.constants import DEFAULT_CDP_URL
-from audio import AUDIO_ENHANCEMENT_OFF
 from speech import DEFAULT_ENDPOINT_MODEL, OLLAMA_CHAT_URL
 
 
@@ -15,7 +14,7 @@ class PreflightOptions(Protocol):
 
     ask_chatgpt: bool
     enroll_me: bool
-    audio_enhancement: str
+    audio_enhancement: bool
 
 
 def check_runtime_dependencies(options: PreflightOptions) -> None:
@@ -29,10 +28,7 @@ def check_runtime_dependencies(options: PreflightOptions) -> None:
     if not ollama_model_is_ready():
         checks_passed = False
 
-    if (
-        options.audio_enhancement != AUDIO_ENHANCEMENT_OFF
-        and not audio_enhancement_is_ready()
-    ):
+    if options.audio_enhancement and not audio_enhancement_is_ready():
         checks_passed = False
 
     if options.ask_chatgpt and not cdp_browser_is_ready():

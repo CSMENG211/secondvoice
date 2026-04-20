@@ -410,7 +410,7 @@ Current CLI flags:
 - `--no-ask`: Turns off ChatGPT submission while keeping capture and transcription active.
 - `--enroll`: Runs voice enrollment instead of stream mode.
 - `--photo-mode`: Selects `none`, `test`, or `live` photo behavior.
-- `--audio-enhancement`: Selects `spectral-gate` or `off` transcription preprocessing.
+- `--no-audio-enhancement`: Disables transcription preprocessing, which is enabled by default.
 
 ### `src/preflight.py`
 
@@ -446,7 +446,7 @@ Audio capture, segmentation, WAV writing, and amplitude helpers. `src/audio/__in
 
 #### `src/audio/enhancement.py`
 
-- `AudioEnhancementConfig`: Selects whether transcription audio is enhanced with `spectral-gate` or left `off`.
+- `AudioEnhancementConfig`: Selects whether final transcription audio is enhanced.
 - `enhance_wav(...)`: Loads a mono 16 kHz PCM WAV, runs non-stationary spectral gating through `noisereduce`, writes an enhanced int16 WAV, and falls back to the raw path if enhancement fails.
 - Enhancement is applied only for final completed-segment transcription. RMS segmentation, semantic endpoint draft transcription, fallback guard draft transcription, and voice matching continue to use raw microphone audio so endpoint timing stays responsive.
 - macOS Voice Isolation can be tried manually from the menu bar Mic Mode control while audio is active, but Apple makes Mic Modes app-dependent. SecondVoice does not rely on it for CLI recording.

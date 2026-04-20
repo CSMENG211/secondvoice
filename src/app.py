@@ -7,8 +7,6 @@ from pathlib import Path
 from loguru import logger
 
 from audio import (
-    AUDIO_ENHANCEMENT_OFF,
-    AUDIO_ENHANCEMENT_SPECTRAL_GATE,
     AudioEnhancementConfig,
     CompletedStreamSegment,
     enhance_wav,
@@ -56,7 +54,7 @@ class RuntimeOptions:
     ask_chatgpt: bool = True
     enroll_me: bool = False
     photo_mode: PhotoMode = "none"
-    audio_enhancement: str = AUDIO_ENHANCEMENT_SPECTRAL_GATE
+    audio_enhancement: bool = True
 
 
 def run(options: RuntimeOptions) -> None:
@@ -192,7 +190,7 @@ def process_stream_segment(
     transcription_path = enhance_wav(
         audio_path,
         enhanced_audio_path,
-        AudioEnhancementConfig(mode=options.audio_enhancement),
+        AudioEnhancementConfig(enabled=options.audio_enhancement),
     )
     try:
         transcript = transcriber.transcribe(transcription_path)
@@ -285,10 +283,10 @@ def print_stream_mode_banner(options: RuntimeOptions) -> None:
         DEFAULT_FINAL_TRANSCRIPTION_BACKEND,
         DEFAULT_FINAL_TRANSCRIPTION_MODEL,
     )
-    if options.audio_enhancement != AUDIO_ENHANCEMENT_OFF:
-        logger.info("Audio enhancement: {}", options.audio_enhancement)
-    else:
-        logger.info("Audio enhancement: disabled")
+    logger.info(
+        "Audio enhancement: {}",
+        "enabled" if options.audio_enhancement else "disabled",
+    )
     if options.photo_mode != "none":
         logger.info(
             "Photo upload: {} mode; using {}",

@@ -90,7 +90,7 @@ def test_disabled_mode_returns_raw_without_reducing() -> None:
             result = enhancement.enhance_wav(
                 input_path,
                 output_path,
-                AudioEnhancementConfig(mode="off"),
+                AudioEnhancementConfig(enabled=False),
             )
         finally:
             enhancement.reduce_noise = original_reduce_noise

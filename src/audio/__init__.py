@@ -1,7 +1,5 @@
 from audio.enrollment import capture_enrollment_utterance
 from audio.enhancement import (
-    AUDIO_ENHANCEMENT_OFF,
-    AUDIO_ENHANCEMENT_SPECTRAL_GATE,
     AudioEnhancementConfig,
     enhance_wav,
 )
@@ -27,8 +25,6 @@ from audio.wav import open_wav_writer, write_chunks, write_wav_file
 
 __all__ = [
     "CompletedStreamSegment",
-    "AUDIO_ENHANCEMENT_OFF",
-    "AUDIO_ENHANCEMENT_SPECTRAL_GATE",
     "AudioEnhancementConfig",
     "SemanticEndpointDetector",
     "SemanticEndpointJob",

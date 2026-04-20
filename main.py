@@ -5,7 +5,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from app import RuntimeOptions, run
-from audio import AUDIO_ENHANCEMENT_OFF, AUDIO_ENHANCEMENT_SPECTRAL_GATE
 from logging_config import configure_logging
 from preflight import check_runtime_dependencies
 
@@ -47,13 +46,13 @@ def parse_args() -> RuntimeOptions:
         ),
     )
     parser.add_argument(
-        "--audio-enhancement",
-        choices=(AUDIO_ENHANCEMENT_SPECTRAL_GATE, AUDIO_ENHANCEMENT_OFF),
-        default=AUDIO_ENHANCEMENT_SPECTRAL_GATE,
+        "--no-audio-enhancement",
+        action="store_false",
+        dest="audio_enhancement",
+        default=True,
         help=(
-            "Preprocess audio before transcription. "
-            "spectral-gate reduces steady and transient background noise; "
-            "off transcribes raw captured audio. Default: spectral-gate."
+            "Disable audio preprocessing before final transcription. "
+            "Audio enhancement is enabled by default."
         ),
     )
     args = parser.parse_args()
