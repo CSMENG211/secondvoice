@@ -166,13 +166,15 @@ Cleanup runs in three places:
 
 ### 3. Semantic Endpoint Check
 
-After `STREAM_SEMANTIC_SILENCE_SECONDS`, currently 2 seconds, the recorder copies the current chunks into a `SemanticEndpointJob` and keeps reading microphone input. A semantic worker thread writes a temporary WAV, runs the fast endpoint transcriber, applies transcript cleanup, and asks Ollama `qwen2.5:1.5b` whether the cleaned transcript is `COMPLETE` or `INCOMPLETE`.
+After `STREAM_SEMANTIC_SILENCE_SECONDS`, currently 2 seconds, the recorder copies the most recent `STREAM_ENDPOINT_DRAFT_SECONDS`, currently 12 seconds, into a `SemanticEndpointJob` and keeps reading microphone input. A semantic worker thread writes a temporary WAV, runs the fast endpoint transcriber, applies transcript cleanup, and asks Ollama `qwen2.5:1.5b` whether the cleaned transcript is `COMPLETE` or `INCOMPLETE`.
 
 The recorder accepts only current results. Each job/result carries `segment_index` and `pause_index`; if the speaker resumed, a newer pause began, or the segment already ended, the old result is stale and ignored. Anything other than a current `COMPLETE` result keeps recording active.
 
 ### 4. Hard Fallback Guard
 
-If no semantic endpoint is accepted, the recorder reaches `STREAM_HARD_SILENCE_SECONDS`, currently 5 seconds. Before cutting, it queues a fallback-check snapshot to the semantic worker and keeps reading microphone input. When the worker result returns, the recorder compares the cleaned endpoint transcript to the latest semantic transcript. If it gained at least `STREAM_FALLBACK_NEW_WORD_THRESHOLD`, currently 3, normalized words, fallback is delayed and listening continues. Otherwise the segment is queued with a silence-fallback completion reason.
+If no semantic endpoint is accepted, the recorder reaches `STREAM_HARD_SILENCE_SECONDS`, currently 5 seconds. Before cutting, it queues a fallback-check snapshot of the same recent draft tail to the semantic worker and keeps reading microphone input. When the worker result returns, the recorder compares the cleaned endpoint transcript to the latest semantic transcript. If it gained at least `STREAM_FALLBACK_NEW_WORD_THRESHOLD`, currently 3, normalized words, fallback is delayed and listening continues. Otherwise the segment is queued with a silence-fallback completion reason.
+
+Fallback delays have safety caps. The recorder accepts fallback once a segment reaches `STREAM_MAX_SEGMENT_SECONDS`, currently 60 seconds, or after `STREAM_MAX_FALLBACK_DELAYS`, currently 2, fallback delays. This prevents low-level noise or ASR hallucinations from keeping one segment open indefinitely. The recorder also avoids queueing additional endpoint work when the semantic worker already has a pending job; if fallback needs a guard while the worker is backed up, the segment is cut instead of growing an endpoint backlog.
 
 ## Threading Model
 
@@ -453,14 +455,14 @@ Audio capture, segmentation, WAV writing, and amplitude helpers. `src/audio/__in
 
 #### `src/audio/segmenter.py`
 
-- `SemanticEndpointJob`: Draft chunk snapshot submitted from the recorder thread to the semantic worker for either semantic completion or fallback guarding.
+- `SemanticEndpointJob`: Draft chunk snapshot submitted from the recorder thread to the semantic worker for either semantic completion or fallback guarding. Jobs are capped to the most recent `STREAM_ENDPOINT_DRAFT_SECONDS`, currently 12 seconds, so endpoint ASR stays bounded even if a live segment keeps growing.
 - `SemanticEndpointResult`: Draft transcript plus completion decision sent from the semantic worker back to the recorder thread.
 - `StreamSpeechDetector`: Stream-only RMS detector with hysteresis: the normal threshold starts recording, a lower continuation threshold keeps active speech alive, and a short hangover protects word/syllable gaps.
 - `StreamSegmenter`: Owns stream-recording mutable state, including open WAV file, segment index, pause index, silence counters, pre-roll, semantic queues, and segment finalization.
 - `new_transcript_words(...)`: Normalizes transcripts and returns tokens added after their longest common prefix, used by the hard-fallback ASR guard.
 - `is_repetitive_transcript(...)`: Detects ASR repetition loops, including meaningful text that decays into a repeated suffix, so they do not delay fallback or get submitted to ChatGPT.
 - `trim_repetitive_transcript_suffix(...)`: Removes only a repeated ASR suffix when a transcript has a useful prefix; returns an empty string for fully repetitive transcripts.
-- Stream logs announce idle/listening transitions: waiting for audio input, audio input detected, and waiting again after a segment is queued.
+- Stream logs announce idle/listening transitions, endpoint/fallback checks, fallback guard delays, and guard-cap fallback acceptance.
 - `stream_utterance_segments(...)`: Compatibility wrapper that creates a `StreamSegmenter` and runs it.
 - `run_semantic_endpoint_worker(...)`: Consumes semantic draft jobs, writes temporary draft WAVs, runs the detector, and publishes results without blocking microphone capture.
 
@@ -507,7 +509,7 @@ Local transcription backend interface and implementations.
 - `model_path_for_run(backend, model, use_local_cache)`: Uses repo names directly for refresh/test runs, but resolves MLX Hugging Face repo names to local cached snapshot paths for normal ChatGPT runs.
 - `cached_huggingface_snapshot_path(repo_id)`: Finds the newest local Hugging Face cache snapshot for an MLX model without refreshing metadata.
 - `FasterWhisperTranscriber`: Loads and runs `faster-whisper`, available for benchmark comparisons and alternate endpoint experiments.
-- `MlxWhisperTranscriber`: Runs `mlx-whisper`, currently using `base.en` for draft endpoint transcription and `small.en` for final completed-segment transcription on Apple Silicon.
+- `MlxWhisperTranscriber`: Runs `mlx-whisper`, currently using `tiny.en` for draft endpoint transcription and `small.en` for final completed-segment transcription on Apple Silicon.
 - `transcribe(audio_path)`: Backend implementations transcribe a WAV file with the coding-interview and system-design initial prompt where supported, then return joined plain text. Calls are serialized per transcriber instance.
 
 #### `src/speech/speaker_id.py`

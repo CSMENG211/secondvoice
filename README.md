@@ -11,6 +11,10 @@ spectral-gate noise reducer before transcription. This helps reduce background
 sounds such as keyboard taps without changing the raw audio used for voice
 matching.
 
+Stream endpoint checks stay lightweight: draft transcription uses the tiny MLX
+Whisper model and only the most recent 12 seconds of the active segment. Final
+segment transcription still uses the larger final model and the enhanced audio.
+
 ### Install
 
 ```sh
@@ -105,6 +109,13 @@ Benchmark transcription on a saved WAV file:
 ```sh
 .venv/bin/python scripts/benchmark_transcriber.py /path/to/sample.wav
 .venv/bin/python scripts/benchmark_transcriber.py --backend faster-whisper --model small.en /path/to/sample.wav
+```
+
+Benchmark audio enhancement with macOS `say` and synthetic background noise:
+
+```sh
+.venv/bin/python scripts/benchmark_audio_enhancement.py --noise-kind keyboard --snr-db 10
+.venv/bin/python scripts/benchmark_audio_enhancement.py --no-transcribe --output-dir /tmp/secondvoice-audio-bench
 ```
 
 Run the browser smoke test:
