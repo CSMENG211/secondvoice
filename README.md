@@ -6,6 +6,11 @@ It captures audio from your microphone, transcribes it locally with
 mlx-whisper, and sends each transcript segment to ChatGPT for role
 classification, context tracking, and answer feedback.
 
+By default, SecondVoice preprocesses each captured WAV with an in-app
+spectral-gate noise reducer before transcription. This helps reduce background
+sounds such as keyboard taps without changing the raw audio used for voice
+matching.
+
 ### Install
 
 ```sh
@@ -69,6 +74,12 @@ Run without photo capture or upload:
 .venv/bin/python main.py --no-ask --photo-mode none
 ```
 
+Compare transcription with raw, unenhanced audio:
+
+```sh
+.venv/bin/python main.py --no-ask --audio-enhancement off
+```
+
 Record an interviewee voice profile:
 
 ```sh
@@ -107,3 +118,7 @@ Run the browser smoke test:
 - Logs are written to `python.log` in the current working directory.
 - The browser profile is stored at `~/.secondvoice/cdp-browser-profile`.
 - On macOS, your terminal may ask for microphone permission on the first run.
+- On macOS, Voice Isolation can sometimes be enabled from the menu bar Mic Mode
+  control while an app is using the microphone. Treat it as an optional extra:
+  Apple makes Mic Modes app-dependent, so SecondVoice does its own in-app audio
+  enhancement instead of relying on a system mode being available to the CLI.

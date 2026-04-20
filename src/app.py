@@ -7,13 +7,18 @@ from pathlib import Path
 from loguru import logger
 
 from audio import (
+    AUDIO_ENHANCEMENT_OFF,
+    AUDIO_ENHANCEMENT_SPECTRAL_GATE,
+    AudioEnhancementConfig,
     CompletedStreamSegment,
+    enhance_wav,
     is_repetitive_transcript,
     stream_utterance_segments,
     trim_repetitive_transcript_suffix,
 )
 from audio.constants import (
     DEFAULT_SILENCE_THRESHOLD,
+    STREAM_FALLBACK_NEW_WORD_THRESHOLD,
     STREAM_HARD_SILENCE_SECONDS,
     STREAM_SEMANTIC_SILENCE_SECONDS,
 )
@@ -51,6 +56,7 @@ class RuntimeOptions:
     ask_chatgpt: bool = True
     enroll_me: bool = False
     photo_mode: PhotoMode = "none"
+    audio_enhancement: str = AUDIO_ENHANCEMENT_SPECTRAL_GATE
 
 
 def run(options: RuntimeOptions) -> None:
@@ -149,6 +155,7 @@ def start_stream_recorder(
             DEFAULT_SILENCE_THRESHOLD,
             STREAM_SEMANTIC_SILENCE_SECONDS,
             semantic_endpoint_detector.detect,
+            STREAM_FALLBACK_NEW_WORD_THRESHOLD,
         ),
     )
     recorder.start()
@@ -180,9 +187,18 @@ def process_stream_segment(
 ) -> bool:
     """Transcribe one stream segment and optionally submit it for feedback."""
     audio_path = segment.path
+    enhanced_audio_path = audio_path.with_name(f"{audio_path.stem}-enhanced.wav")
     speaker_hint = build_speaker_hint(audio_path, speaker_identifier)
-    transcript = transcriber.transcribe(audio_path)
-    audio_path.unlink(missing_ok=True)
+    transcription_path = enhance_wav(
+        audio_path,
+        enhanced_audio_path,
+        AudioEnhancementConfig(mode=options.audio_enhancement),
+    )
+    try:
+        transcript = transcriber.transcribe(transcription_path)
+    finally:
+        enhanced_audio_path.unlink(missing_ok=True)
+        audio_path.unlink(missing_ok=True)
     print_transcript(transcript)
     print_speaker_hint(speaker_hint)
 
@@ -269,6 +285,10 @@ def print_stream_mode_banner(options: RuntimeOptions) -> None:
         DEFAULT_FINAL_TRANSCRIPTION_BACKEND,
         DEFAULT_FINAL_TRANSCRIPTION_MODEL,
     )
+    if options.audio_enhancement != AUDIO_ENHANCEMENT_OFF:
+        logger.info("Audio enhancement: {}", options.audio_enhancement)
+    else:
+        logger.info("Audio enhancement: disabled")
     if options.photo_mode != "none":
         logger.info(
             "Photo upload: {} mode; using {}",

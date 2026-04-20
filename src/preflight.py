@@ -6,6 +6,7 @@ from typing import Protocol
 from loguru import logger
 
 from automation.constants import DEFAULT_CDP_URL
+from audio import AUDIO_ENHANCEMENT_OFF
 from speech import DEFAULT_ENDPOINT_MODEL, OLLAMA_CHAT_URL
 
 
@@ -14,6 +15,7 @@ class PreflightOptions(Protocol):
 
     ask_chatgpt: bool
     enroll_me: bool
+    audio_enhancement: str
 
 
 def check_runtime_dependencies(options: PreflightOptions) -> None:
@@ -27,6 +29,12 @@ def check_runtime_dependencies(options: PreflightOptions) -> None:
     if not ollama_model_is_ready():
         checks_passed = False
 
+    if (
+        options.audio_enhancement != AUDIO_ENHANCEMENT_OFF
+        and not audio_enhancement_is_ready()
+    ):
+        checks_passed = False
+
     if options.ask_chatgpt and not cdp_browser_is_ready():
         checks_passed = False
 
@@ -35,6 +43,22 @@ def check_runtime_dependencies(options: PreflightOptions) -> None:
         raise SystemExit(1)
 
     logger.info("Startup dependency checks passed.")
+
+
+def audio_enhancement_is_ready() -> bool:
+    """Return whether the configured in-app noise reducer is importable."""
+    try:
+        import noisereduce  # noqa: F401
+    except ImportError as error:
+        logger.error("Audio enhancement dependency noisereduce is not installed: {}", error)
+        logger.error(
+            "Install dependencies with: .venv/bin/python -m pip install -r "
+            "requirements.txt"
+        )
+        return False
+
+    logger.info("Audio enhancement ready: noisereduce")
+    return True
 
 
 def ollama_model_is_ready() -> bool:

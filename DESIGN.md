@@ -4,6 +4,8 @@ SecondVoice is a local mock-interview assistant. It listens to microphone audio,
 
 The application is intentionally small and file-oriented. `main.py` handles command-line setup, `src/preflight.py` checks local dependencies, and `src/app.py` coordinates the stream runtime across focused packages for audio capture, speech processing, prompt construction, photo handling, camera capture, browser automation, constants, and logging.
 
+Completed stream segments are optionally enhanced before final transcription. The default `spectral-gate` mode writes a cleaned temporary WAV for final ASR while preserving the raw segment for speaker matching and using raw draft audio for endpoint checks.
+
 ## Goals
 
 - Capture mock-interview speech with minimal manual control.
@@ -38,11 +40,12 @@ This is the default path.
 4. `start_stream_recorder()` starts a background thread running `audio.stream_utterance_segments()`.
 5. If photo capture is enabled, `photo.start_photo_timer()` starts a second background thread running `capture_photos_on_interval()`.
 6. The main thread loads the configured endpoint and final transcribers, `SpeakerIdentifier`, and `PhotoUploadTracker`.
-7. During recording, `StreamSegmenter` owns segment boundaries. It uses RMS speech activity, asynchronous semantic endpoint checks after 2.5-second pauses, and a guarded 7.5-second hard fallback. Transcript cleanup is deterministic: repeated ASR tails are trimmed before endpointing, fallback comparison, or final submission; fully repetitive transcripts are skipped.
+7. During recording, `StreamSegmenter` owns segment boundaries. It uses RMS speech activity, asynchronous semantic endpoint checks after 2-second pauses, and a guarded 5-second hard fallback. Transcript cleanup is deterministic: repeated ASR tails are trimmed before endpointing, fallback comparison, or final submission; fully repetitive transcripts are skipped.
 8. For every queued completed segment, `process_stream_segment()`:
    - Builds a speaker hint from the WAV file.
-   - Transcribes the WAV file locally.
-   - Deletes the temporary WAV segment.
+   - Creates an enhanced temporary WAV for transcription when audio enhancement is enabled.
+   - Transcribes the enhanced WAV locally, falling back to the raw WAV if enhancement fails.
+   - Deletes the temporary raw and enhanced WAV segments.
    - Prints the transcript and speaker hint.
    - Logs whether the segment ended by semantic completion, silence fallback, or shutdown.
    - Builds a ChatGPT prompt.
@@ -125,6 +128,7 @@ Microphone
   -> temporary WAV segment
   -> app.process_stream_segment()
   -> speech.SpeakerIdentifier.match()
+  -> audio.enhance_wav()
   -> speech.Transcriber.transcribe()
   -> gpt.build_stream_prompt()
   -> optional photo selected by vision.next_photo_upload()
@@ -162,13 +166,13 @@ Cleanup runs in three places:
 
 ### 3. Semantic Endpoint Check
 
-After `STREAM_SEMANTIC_SILENCE_SECONDS`, currently 2.5 seconds, the recorder copies the current chunks into a `SemanticEndpointJob` and keeps reading microphone input. A semantic worker thread writes a temporary WAV, runs the fast endpoint transcriber, applies transcript cleanup, and asks Ollama `qwen2.5:1.5b` whether the cleaned transcript is `COMPLETE` or `INCOMPLETE`.
+After `STREAM_SEMANTIC_SILENCE_SECONDS`, currently 2 seconds, the recorder copies the current chunks into a `SemanticEndpointJob` and keeps reading microphone input. A semantic worker thread writes a temporary WAV, runs the fast endpoint transcriber, applies transcript cleanup, and asks Ollama `qwen2.5:1.5b` whether the cleaned transcript is `COMPLETE` or `INCOMPLETE`.
 
 The recorder accepts only current results. Each job/result carries `segment_index` and `pause_index`; if the speaker resumed, a newer pause began, or the segment already ended, the old result is stale and ignored. Anything other than a current `COMPLETE` result keeps recording active.
 
 ### 4. Hard Fallback Guard
 
-If no semantic endpoint is accepted, the recorder reaches `STREAM_HARD_SILENCE_SECONDS`, currently 7.5 seconds. Before cutting, it queues a fallback-check snapshot to the semantic worker and keeps reading microphone input. When the worker result returns, the recorder compares the cleaned endpoint transcript to the latest semantic transcript. If it gained at least `STREAM_FALLBACK_NEW_WORD_THRESHOLD`, currently 3, normalized words, fallback is delayed and listening continues. Otherwise the segment is queued with a silence-fallback completion reason.
+If no semantic endpoint is accepted, the recorder reaches `STREAM_HARD_SILENCE_SECONDS`, currently 5 seconds. Before cutting, it queues a fallback-check snapshot to the semantic worker and keeps reading microphone input. When the worker result returns, the recorder compares the cleaned endpoint transcript to the latest semantic transcript. If it gained at least `STREAM_FALLBACK_NEW_WORD_THRESHOLD`, currently 3, normalized words, fallback is delayed and listening continues. Otherwise the segment is queued with a silence-fallback completion reason.
 
 ## Threading Model
 
@@ -210,7 +214,7 @@ Semantic endpointing uses a second queue pair inside the audio layer.
 ```text
 Recorder thread
   keeps reading microphone audio
-  after a 2.5-second pause, copies the current chunks
+  after a 2-second pause, copies the current chunks
   puts SemanticEndpointJob into semantic_job_queue
   at hard fallback, queues a fallback-check SemanticEndpointJob
         |
@@ -240,11 +244,11 @@ These examples use `segment_index=5` and start with `pause_index=10`. Times are 
 
 ### Semantic Completion
 
-If the speaker stays silent after the first semantic check, an early cut can happen before the 7.5-second fallback.
+If the speaker stays silent after the first semantic check, an early cut can happen before the 5-second fallback.
 
 ```text
 t+0.0  silence starts
-t+2.5  semantic job queued for segment 5, pause 10, purpose semantic
+t+2.0  semantic job queued for segment 5, pause 10, purpose semantic
 t+3.0  semantic result returns COMPLETE for segment 5, pause 10, purpose semantic
 t+3.0  recorder accepts the current result and cuts the segment
 ```
@@ -255,7 +259,7 @@ If the speaker resumes before the semantic result returns, the old result is sta
 
 ```text
 t+0.0  silence starts
-t+2.5  semantic job queued for segment 5, pause 10, purpose semantic
+t+2.0  semantic job queued for segment 5, pause 10, purpose semantic
 t+2.6  speaker resumes; recorder increments pause_index to 11
 t+4.0  old semantic result returns COMPLETE for segment 5, pause 10, purpose semantic
 t+4.0  recorder ignores the stale result
@@ -267,14 +271,14 @@ If the speaker pauses again after resuming, the recorder queues a new semantic c
 
 ```text
 t+0.0  first silence starts
-t+2.5  semantic job queued for segment 5, pause 10, purpose semantic
+t+2.0  semantic job queued for segment 5, pause 10, purpose semantic
 t+2.6  speaker resumes; recorder increments pause_index to 11
 t+4.0  old result for pause 10 is ignored as stale
 t+5.0  second silence starts
-t+7.5  semantic job queued for segment 5, pause 11, purpose semantic
+t+7.0  semantic job queued for segment 5, pause 11, purpose semantic
 ```
 
-The 7.5-second hard fallback is counted from the current continuous silence. In this example, if no current semantic result is accepted, fallback would be considered around `t+12.5`, not `t+7.5`, because speech resumed at `t+2.6`.
+The 5-second hard fallback is counted from the current continuous silence. In this example, if no current semantic result is accepted, fallback would be considered around `t+10`, not `t+5`, because speech resumed at `t+2.6`.
 
 ### Fallback Accepted
 
@@ -282,14 +286,14 @@ If the current pause reaches the hard fallback and the fallback transcript has n
 
 ```text
 t+0.0  silence starts
-t+2.5  semantic job queued for segment 5, pause 10, purpose semantic
+t+2.0  semantic job queued for segment 5, pause 10, purpose semantic
 t+3.0  semantic result returns INCOMPLETE for segment 5, pause 10, purpose semantic
-t+7.5  fallback job queued for segment 5, pause 10, purpose fallback
-t+8.0  fallback result returns transcript matching the latest semantic transcript
-t+8.0  recorder accepts fallback and queues the segment
+t+5.0  fallback job queued for segment 5, pause 10, purpose fallback
+t+5.5  fallback result returns transcript matching the latest semantic transcript
+t+5.5  recorder accepts fallback and queues the segment
 ```
 
-The recorder keeps reading microphone audio between `t+7.5` and `t+8.0`; fallback endpointing does not block `RawInputStream.read()`.
+The recorder keeps reading microphone audio between `t+5.0` and `t+5.5`; fallback endpointing does not block `RawInputStream.read()`.
 
 ### Fallback Delayed
 
@@ -297,12 +301,12 @@ If the fallback transcript gained enough meaningful new words, the recorder trea
 
 ```text
 t+0.0  silence starts
-t+2.5  semantic job queued for segment 5, pause 10, purpose semantic
+t+2.0  semantic job queued for segment 5, pause 10, purpose semantic
 t+3.0  semantic result returns INCOMPLETE with transcript "hello world"
-t+7.5  fallback job queued for segment 5, pause 10, purpose fallback
-t+8.0  fallback result returns "hello world from google today"
-t+8.0  new-word suffix is "from google today" (3 words)
-t+8.0  recorder delays fallback, clears silence, increments pause_index to 11
+t+5.0  fallback job queued for segment 5, pause 10, purpose fallback
+t+5.5  fallback result returns "hello world from google today"
+t+5.5  new-word suffix is "from google today" (3 words)
+t+5.5  recorder delays fallback, clears silence, increments pause_index to 11
 ```
 
 ### Stale Fallback Result
@@ -311,10 +315,10 @@ Fallback results use the same stale-result guard as semantic endpoint results.
 
 ```text
 t+0.0  silence starts
-t+7.5  fallback job queued for segment 5, pause 10, purpose fallback
-t+7.6  speaker resumes; recorder increments pause_index to 11
-t+8.2  fallback result returns for segment 5, pause 10, purpose fallback
-t+8.2  recorder ignores the stale fallback result
+t+5.0  fallback job queued for segment 5, pause 10, purpose fallback
+t+5.1  speaker resumes; recorder increments pause_index to 11
+t+5.5  fallback result returns for segment 5, pause 10, purpose fallback
+t+5.5  recorder ignores the stale fallback result
 ```
 
 ### Repeated Tail Cleanup
@@ -406,12 +410,14 @@ Current CLI flags:
 - `--no-ask`: Turns off ChatGPT submission while keeping capture and transcription active.
 - `--enroll`: Runs voice enrollment instead of stream mode.
 - `--photo-mode`: Selects `none`, `test`, or `live` photo behavior.
+- `--audio-enhancement`: Selects `spectral-gate` or `off` transcription preprocessing.
 
 ### `src/preflight.py`
 
 Startup dependency checks.
 
 - `check_runtime_dependencies(options)`: Runs all required startup checks and aborts before microphone capture when a dependency is missing.
+- `audio_enhancement_is_ready()`: Checks that `noisereduce` is importable when enhancement is enabled.
 - `ollama_model_is_ready()`: Checks that Ollama is reachable and `qwen2.5:1.5b` is installed.
 - `cdp_browser_is_ready()`: Checks that Chrome CDP is reachable for ChatGPT submission runs.
 
@@ -437,6 +443,13 @@ Audio capture, segmentation, WAV writing, and amplitude helpers. `src/audio/__in
 #### `src/audio/enrollment.py`
 
 - `capture_enrollment_utterance(...)`: Records one voice-enrollment sentence using speech-start and silence-stop triggers.
+
+#### `src/audio/enhancement.py`
+
+- `AudioEnhancementConfig`: Selects whether transcription audio is enhanced with `spectral-gate` or left `off`.
+- `enhance_wav(...)`: Loads a mono 16 kHz PCM WAV, runs non-stationary spectral gating through `noisereduce`, writes an enhanced int16 WAV, and falls back to the raw path if enhancement fails.
+- Enhancement is applied only for final completed-segment transcription. RMS segmentation, semantic endpoint draft transcription, fallback guard draft transcription, and voice matching continue to use raw microphone audio so endpoint timing stays responsive.
+- macOS Voice Isolation can be tried manually from the menu bar Mic Mode control while audio is active, but Apple makes Mic Modes app-dependent. SecondVoice does not rely on it for CLI recording.
 
 #### `src/audio/segmenter.py`
 
