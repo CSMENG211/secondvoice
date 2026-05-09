@@ -3,7 +3,9 @@ from pathlib import Path
 from loguru import logger
 
 
-CONTEXT_DIR = Path.home() / ".secondvoice" / "context"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CONTEXT_DIR = REPO_ROOT / "context"
+LEGACY_CONTEXT_DIR = Path.home() / ".secondvoice" / "context"
 
 ROUND_CONTEXT_FILES = {
     "coding": "coding.md",
@@ -65,6 +67,10 @@ def ensure_context_templates() -> None:
     }
     for filename, template in templates.items():
         path = CONTEXT_DIR / filename
+        legacy_path = LEGACY_CONTEXT_DIR / filename
+        if not path.exists() and legacy_path.exists():
+            path.write_text(legacy_path.read_text(encoding="utf-8"), encoding="utf-8")
+            continue
         if not path.exists():
             path.write_text(template, encoding="utf-8")
 

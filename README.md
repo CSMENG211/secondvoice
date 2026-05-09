@@ -80,7 +80,7 @@ Run without photo capture or upload:
 .venv/bin/python main.py --no-ask --photo-mode none
 ```
 
-Round context files are loaded from `~/.secondvoice/context/`:
+Round context files are loaded from `context/` in this repository:
 
 - `coding.md`
 - `system_design.md`
