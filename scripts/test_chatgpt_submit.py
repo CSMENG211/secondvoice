@@ -33,6 +33,7 @@ def main() -> None:
             SMOKE_TEST_TRANSCRIPT,
             include_mode_prompt=True,
             include_photo_context=True,
+            round_type="coding",
         ),
         photo_path=STATIC_INTERVIEW_PHOTO_PATH,
     )

@@ -62,6 +62,10 @@ Stream and submit to ChatGPT:
 
 ```sh
 .venv/bin/python main.py
+.venv/bin/python main.py --round coding
+.venv/bin/python main.py --round system-design
+.venv/bin/python main.py --round behavior
+.venv/bin/python main.py --round offer-negotiation
 ```
 
 Print transcripts without submitting to ChatGPT:
@@ -75,6 +79,15 @@ Run without photo capture or upload:
 ```sh
 .venv/bin/python main.py --no-ask --photo-mode none
 ```
+
+Round context files are loaded from `~/.secondvoice/context/`:
+
+- `coding.md`
+- `system_design.md`
+- `behavior.md`
+- `offer_negotiation.md`
+
+Missing files are auto-created with editable placeholders on startup.
 
 Run with photo mode:
 

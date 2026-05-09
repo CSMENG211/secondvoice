@@ -29,6 +29,15 @@ def parse_args() -> RuntimeOptions:
         description="Stream mock-interview audio segments to ChatGPT."
     )
     parser.add_argument(
+        "--round",
+        choices=("coding", "system-design", "behavior", "offer-negotiation"),
+        default="coding",
+        help=(
+            "Interview round mode: coding, system-design, behavior, or "
+            "offer-negotiation. Default: coding."
+        ),
+    )
+    parser.add_argument(
         "--no-ask",
         action="store_false",
         dest="ask_chatgpt",
@@ -50,6 +59,7 @@ def parse_args() -> RuntimeOptions:
     return RuntimeOptions(
         ask_chatgpt=args.ask_chatgpt,
         photo_mode=args.photo_mode,
+        round_type=args.round,
     )
 
 

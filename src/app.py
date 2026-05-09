@@ -2,6 +2,7 @@ import queue
 import tempfile
 import threading
 from dataclasses import dataclass
+from typing import Literal
 from pathlib import Path
 
 from loguru import logger
@@ -21,7 +22,8 @@ from speech.constants import (
     DEFAULT_ENDPOINT_TRANSCRIPTION_BACKEND,
     DEFAULT_ENDPOINT_TRANSCRIPTION_MODEL,
 )
-from gpt.prompts import build_stream_prompt
+from gpt import ensure_context_templates, load_round_context
+from gpt.prompts import BehaviorState, build_stream_prompt, parse_actual_story_id
 from vision import (
     PhotoMode,
     PhotoUploadTracker,
@@ -38,12 +40,16 @@ from speech import (
 )
 
 
+InterviewRound = Literal["coding", "system-design", "behavior", "offer-negotiation"]
+
+
 @dataclass(frozen=True)
 class RuntimeOptions:
     """Options selected by the command-line interface."""
 
     ask_chatgpt: bool = True
     photo_mode: PhotoMode = "none"
+    round_type: InterviewRound = "coding"
 
 
 def run(options: RuntimeOptions) -> None:
@@ -54,6 +60,9 @@ def run(options: RuntimeOptions) -> None:
 def stream_loop(options: RuntimeOptions) -> None:
     """Continuously capture interview segments and submit each segment for feedback."""
     is_first_submission = True
+    ensure_context_templates()
+    round_context = load_round_context(options.round_type)
+    behavior_state = BehaviorState()
 
     print_stream_mode_banner(options)
 
@@ -95,6 +104,8 @@ def stream_loop(options: RuntimeOptions) -> None:
                     options,
                     include_mode_prompt=is_first_submission,
                     photo_tracker=photo_tracker,
+                    round_context=round_context,
+                    behavior_state=behavior_state,
                 )
                 if submitted:
                     is_first_submission = False
@@ -152,6 +163,8 @@ def process_stream_segment(
     options: RuntimeOptions,
     include_mode_prompt: bool,
     photo_tracker: PhotoUploadTracker,
+    round_context: str,
+    behavior_state: BehaviorState,
 ) -> bool:
     """Transcribe one stream segment and optionally submit it for feedback."""
     audio_path = segment.path
@@ -175,14 +188,21 @@ def process_stream_segment(
             segment.completion_reason,
         )
         photo_path, photo_signature = next_photo_upload(options.photo_mode, photo_tracker)
-        submitted_to_chatgpt = submit_to_chatgpt(
+        submitted_to_chatgpt, response_text = submit_to_chatgpt(
             build_stream_prompt(
                 transcript,
                 include_mode_prompt,
                 include_photo_context=photo_path is not None,
+                round_type=options.round_type,
+                round_context=round_context,
+                behavior_state=behavior_state,
             ),
             photo_path=photo_path,
         )
+        if options.round_type == "behavior":
+            actual_story_id = parse_actual_story_id(response_text or "")
+            if actual_story_id is not None:
+                behavior_state.used_story_ids.add(actual_story_id)
         if submitted_to_chatgpt and photo_signature is not None:
             photo_tracker.last_signature = photo_signature
     logger.info("")
@@ -220,6 +240,7 @@ def print_stream_mode_banner(options: RuntimeOptions) -> None:
         logger.debug("Photo capture: disabled")
     if options.ask_chatgpt:
         logger.info("ChatGPT submission: enabled")
+        logger.info("Round mode: {}", options.round_type)
     else:
         logger.info("ChatGPT submission: disabled")
 

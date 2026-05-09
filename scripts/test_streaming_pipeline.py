@@ -46,6 +46,8 @@ def test_process_stream_segment_uses_streamed_transcript_and_raw_audio() -> None
             options,
             include_mode_prompt=True,
             photo_tracker=app.PhotoUploadTracker(),
+            round_context="",
+            behavior_state=app.BehaviorState(),
         )
 
         assert not submitted

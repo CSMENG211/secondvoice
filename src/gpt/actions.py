@@ -23,11 +23,11 @@ def submit_to_chatgpt(
     prompt: str,
     photo_path: Path | None = None,
     cdp_url: str = DEFAULT_CDP_URL,
-) -> bool:
+) -> tuple[bool, str | None]:
     """Open ChatGPT, place the prompt into the composer, and submit it."""
     if not prompt.strip():
         logger.info("Skipping ChatGPT submission because the transcript is empty.")
-        return False
+        return False, None
 
     suppress_node_deprecation_warnings()
 
@@ -54,7 +54,7 @@ def submit_to_chatgpt(
             if has_photo:
                 if not attach_file(page, photo_path):
                     logger.error("Skipping ChatGPT submission because the photo could not be attached.")
-                    return False
+                    return False, None
 
             fill_prompt(prompt_box, prompt)
             submit_prompt(page, prompt_box, wait_for_upload=has_photo)
@@ -64,13 +64,40 @@ def submit_to_chatgpt(
             wait_for_chatgpt_response(page)
             scroll_down_short_times(page)
             activate_chrome()
-            return True
+            return True, latest_assistant_message(page)
         except PlaywrightTimeoutError as exc:
             logger.error("Could not find the ChatGPT prompt box.")
             logger.error("If this is the first run, log in to ChatGPT in the opened browser, then run again.")
             raise SystemExit(1) from exc
         finally:
             session.close()
+
+
+def latest_assistant_message(page) -> str | None:
+    """Return the latest visible assistant message text when available."""
+    selectors = [
+        '[data-message-author-role="assistant"]',
+        'article[data-testid^="conversation-turn-"]',
+        "main article",
+    ]
+    for selector in selectors:
+        try:
+            text = page.evaluate(
+                """
+                (sel) => {
+                  const nodes = Array.from(document.querySelectorAll(sel));
+                  if (!nodes.length) return null;
+                  const node = nodes[nodes.length - 1];
+                  return (node.innerText || "").trim() || null;
+                }
+                """,
+                selector,
+            )
+            if text:
+                return text
+        except Exception:
+            continue
+    return None
 
 
 def suppress_node_deprecation_warnings() -> None:
