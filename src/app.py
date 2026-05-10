@@ -28,7 +28,13 @@ from speech.constants import (
     DEFAULT_FINAL_TRANSCRIPTION_MODEL,
 )
 from gpt import ensure_context_templates, load_round_context
-from gpt.prompts import BehaviorState, build_stream_prompt, parse_actual_story_id
+from gpt.prompts import (
+    BehaviorState,
+    DesignState,
+    build_stream_prompt,
+    parse_actual_story_id,
+    parse_design_deep_dive_topic_ids,
+)
 from vision import (
     PhotoMode,
     PhotoUploadTracker,
@@ -68,6 +74,7 @@ def stream_loop(options: RuntimeOptions) -> None:
     ensure_context_templates()
     round_context = load_round_context(options.round_type)
     behavior_state = BehaviorState()
+    design_state = DesignState()
 
     print_stream_mode_banner(options)
 
@@ -120,6 +127,7 @@ def stream_loop(options: RuntimeOptions) -> None:
                     photo_tracker=photo_tracker,
                     round_context=round_context,
                     behavior_state=behavior_state,
+                    design_state=design_state,
                     final_transcriber=final_transcriber,
                 )
                 if submitted:
@@ -180,6 +188,7 @@ def process_stream_segment(
     photo_tracker: PhotoUploadTracker,
     round_context: str,
     behavior_state: BehaviorState,
+    design_state: DesignState,
     final_transcriber: Transcriber | None = None,
 ) -> bool:
     """Transcribe one stream segment and optionally submit it for feedback."""
@@ -216,6 +225,7 @@ def process_stream_segment(
                 round_type=options.round_type,
                 round_context=round_context,
                 behavior_state=behavior_state,
+                design_state=design_state,
             ),
             photo_path=photo_path,
         )
@@ -223,6 +233,10 @@ def process_stream_segment(
             actual_story_id = parse_actual_story_id(response_text or "")
             if actual_story_id is not None:
                 behavior_state.used_story_ids.add(actual_story_id)
+        if options.round_type == "design":
+            design_state.used_deep_dive_topic_ids.update(
+                parse_design_deep_dive_topic_ids(response_text or "")
+            )
         if submitted_to_chatgpt and photo_signature is not None:
             photo_tracker.last_signature = photo_signature
     logger.info("")

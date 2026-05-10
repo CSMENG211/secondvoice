@@ -73,6 +73,8 @@ Missing files are auto-created with editable placeholders on startup. Legacy fil
 
 Behavioral mode tracks story IDs used during the current run. ChatGPT is asked to include one metadata bullet with `actual_story_id=...`; SecondVoice parses that value and excludes that story from later behavioral suggestions in the same process.
 
+Design mode tracks deep-dive topic IDs proposed during the current run. ChatGPT is asked to include `design_deep_dive_topic_ids=...`; SecondVoice parses those IDs and excludes those deep-dive topics from later design suggestions.
+
 Run with photo mode:
 
 ```sh

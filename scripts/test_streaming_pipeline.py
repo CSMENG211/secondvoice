@@ -67,6 +67,7 @@ def test_process_stream_segment_uses_streamed_transcript_and_raw_audio() -> None
             photo_tracker=app.PhotoUploadTracker(),
             round_context="",
             behavior_state=app.BehaviorState(),
+            design_state=app.DesignState(),
         )
 
         assert not submitted
@@ -93,6 +94,7 @@ def test_process_stream_segment_prefers_finalized_transcript_when_available() ->
             photo_tracker=app.PhotoUploadTracker(),
             round_context="",
             behavior_state=app.BehaviorState(),
+            design_state=app.DesignState(),
             final_transcriber=final_transcriber,
         )
 

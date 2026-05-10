@@ -42,9 +42,14 @@ ROUND_PROMPTS = {
         "- First give one short bullet summarizing the current design topic or question being discussed.\n"
         "- Then give one short bullet with the best direct answer the interviewee should say next.\n"
         "- Then give exactly 2 possible deep-dive topics.\n"
+        "- Exclude topics listed in Used Design Deep Dive Topic IDs.\n"
+        "- Choose deep-dive topics that have not already been proposed or discussed in this conversation.\n"
         "- For each deep-dive topic, explain why it is relevant now and the brief direction the deep dive should go.\n"
         "- Prefer the most relevant tradeoffs from the round context over generic system design coverage.\n"
         "- Keep bullets concise, practical, and tightly tied to the transcript.\n"
+        "- Include exactly one machine-parsable metadata bullet in this format:\n"
+        "  - META: design_deep_dive_topic_ids=<id1,id2>\n"
+        "- Use short stable IDs for the two deep-dive topics, like cache_invalidation or shard_hotspots.\n"
     ),
     "offer": (
         f"{COMMON_RULES}\n\n"

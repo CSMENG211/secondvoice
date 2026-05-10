@@ -38,7 +38,7 @@ This is the default path.
 
 1. `main.py` configures logging, parses CLI flags, runs `preflight.check_runtime_dependencies()`, and calls `app.run()`.
 2. `app.run()` enters `stream_loop()`.
-3. `stream_loop()` ensures round context files exist, loads the selected round context, creates a temporary directory for WAV segments, and initializes `BehaviorState`.
+3. `stream_loop()` ensures round context files exist, loads the selected round context, creates a temporary directory for WAV segments, and initializes `BehaviorState` and `DesignState`.
 4. The main thread creates one endpoint transcriber, one final transcriber, an `OllamaSemanticEndpointDetector`, and a `PhotoUploadTracker`.
 5. `start_stream_recorder()` starts a background thread running `audio.stream_utterance_segments()`.
 6. If photo capture is enabled, `vision.start_photo_timer()` starts a second background thread that periodically writes the configured photo path.
@@ -88,6 +88,8 @@ Round prompts live in `src/gpt/constants.py`. Editable context files live in `co
 `ensure_context_templates()` creates any missing context file with a placeholder. If a matching legacy file exists under `~/.secondvoice/context/`, it is copied into the repo context directory.
 
 Behavioral mode keeps an in-memory set of story IDs used during the current run. The prompt includes `Used Story IDs:` on every behavioral segment, and `parse_actual_story_id()` reads the machine-parsable metadata bullet returned by ChatGPT.
+
+Design mode keeps an in-memory set of proposed deep-dive topic IDs during the current run. The prompt includes `Used Design Deep Dive Topic IDs:` on every design segment, and `parse_design_deep_dive_topic_ids()` reads the machine-parsable metadata bullet returned by ChatGPT.
 
 ### 4. Photo Context Paths
 
@@ -314,7 +316,7 @@ Temporary state:
 ### `src/gpt/`
 
 - `context.py`: Creates and loads round context files.
-- `prompts.py`: Builds round-specific prompts, serializes behavioral used-story IDs, and parses returned `actual_story_id`.
+- `prompts.py`: Builds round-specific prompts, serializes behavioral used-story IDs and design deep-dive topic IDs, and parses returned metadata.
 - `constants.py`: Stores round prompt contracts, photo context prompt, ChatGPT URL/theme/timeout settings, and dedicated tab markers.
 - `actions.py`: Connects to Chrome CDP, reuses or opens the marked ChatGPT tab, attaches optional photos, submits prompts, waits for responses, scrolls, and returns the latest assistant message text.
 
