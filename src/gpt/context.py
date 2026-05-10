@@ -9,9 +9,9 @@ LEGACY_CONTEXT_DIR = Path.home() / ".secondvoice" / "context"
 
 ROUND_CONTEXT_FILES = {
     "coding": "coding.md",
-    "system-design": "system_design.md",
+    "design": "design.md",
     "behavior": "behavior.md",
-    "offer-negotiation": "offer_negotiation.md",
+    "offer": "offer.md",
 }
 
 
@@ -28,7 +28,7 @@ def ensure_context_templates() -> None:
             "## Weak Areas\n"
             "- Topics where you want fallback guidance.\n"
         ),
-        "system_design.md": (
+        "design.md": (
             "# System Design Round Context\n\n"
             "## Domain Background\n"
             "- Product/domain context you want answers grounded in.\n\n"
@@ -51,7 +51,7 @@ def ensure_context_templates() -> None:
             "Action: <fill>\n"
             "Result: <fill>\n"
         ),
-        "offer_negotiation.md": (
+        "offer.md": (
             "# Offer Negotiation Context\n\n"
             "## Current Role\n"
             "- Company / level / location\n"

@@ -63,9 +63,9 @@ Stream and submit to ChatGPT:
 ```sh
 .venv/bin/python main.py
 .venv/bin/python main.py --round coding
-.venv/bin/python main.py --round system-design
+.venv/bin/python main.py --round design
 .venv/bin/python main.py --round behavior
-.venv/bin/python main.py --round offer-negotiation
+.venv/bin/python main.py --round offer
 ```
 
 Print transcripts without submitting to ChatGPT:
@@ -83,9 +83,9 @@ Run without photo capture or upload:
 Round context files are loaded from `context/` in this repository:
 
 - `coding.md`
-- `system_design.md`
+- `design.md`
 - `behavior.md`
-- `offer_negotiation.md`
+- `offer.md`
 
 Missing files are auto-created with editable placeholders on startup.
 

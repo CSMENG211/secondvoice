@@ -30,11 +30,11 @@ def parse_args() -> RuntimeOptions:
     )
     parser.add_argument(
         "--round",
-        choices=("coding", "system-design", "behavior", "offer-negotiation"),
+        choices=("coding", "design", "behavior", "offer"),
         default="coding",
         help=(
-            "Interview round mode: coding, system-design, behavior, or "
-            "offer-negotiation. Default: coding."
+            "Interview round mode: coding, design, behavior, or offer. "
+            "Default: coding."
         ),
     )
     parser.add_argument(

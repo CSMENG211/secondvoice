@@ -35,7 +35,7 @@ ROUND_PROMPTS = {
         "- Bullet 2: algorithm strategy (for example BFS/DFS/two pointers).\n"
         "- Bullet 3: immediate next step or pitfall to avoid.\n"
     ),
-    "system-design": (
+    "design": (
         f"{COMMON_RULES}\n\n"
         "System design response contract:\n"
         "- Walk through in this order: functional requirements, "
@@ -43,7 +43,7 @@ ROUND_PROMPTS = {
         "architecture, deep-dive tradeoff.\n"
         "- Keep each bullet actionable and concise.\n"
     ),
-    "offer-negotiation": (
+    "offer": (
         f"{COMMON_RULES}\n\n"
         "Offer negotiation response contract:\n"
         "- Provide the strongest candidate response to the latest recruiter/"
