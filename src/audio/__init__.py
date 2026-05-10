@@ -19,9 +19,6 @@ from audio.stream_types import (
     TranscriptionResult,
 )
 from audio.stream_workers import run_semantic_endpoint_worker, run_transcription_worker
-from audio.transcript_utils import (
-    is_repetitive_transcript,
-)
 from audio.wav import open_wav_writer, write_chunks, write_wav_file
 
 __all__ = [
@@ -39,7 +36,6 @@ __all__ = [
     "create_pre_roll_buffer",
     "open_wav_writer",
     "rms_level",
-    "is_repetitive_transcript",
     "run_transcription_worker",
     "run_semantic_endpoint_worker",
     "stream_utterance_segments",

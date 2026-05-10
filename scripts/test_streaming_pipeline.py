@@ -35,6 +35,20 @@ class RecordingTranscriber:
         return "hello world"
 
 
+class FinalizingTranscriber:
+    def __init__(self, transcript: str, *, raise_error: bool = False) -> None:
+        self.transcript = transcript
+        self.raise_error = raise_error
+        self.path: Path | None = None
+
+    def transcribe(self, audio_path: Path, *, log_progress: bool = True) -> str:
+        self.path = audio_path
+        assert audio_path.exists()
+        if self.raise_error:
+            raise RuntimeError("boom")
+        return self.transcript
+
+
 def test_process_stream_segment_uses_streamed_transcript_and_raw_audio() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         raw_path = Path(temp_dir) / "stream-segment-0001.wav"
@@ -52,6 +66,43 @@ def test_process_stream_segment_uses_streamed_transcript_and_raw_audio() -> None
 
         assert not submitted
         assert not raw_path.exists()
+
+
+def test_process_stream_segment_prefers_finalized_transcript_when_available() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        raw_path = Path(temp_dir) / "stream-segment-0001.wav"
+        write_wav_file(raw_path, [silent_chunk()])
+        options = app.RuntimeOptions(ask_chatgpt=False)
+        final_transcriber = FinalizingTranscriber("full transcript")
+
+        submitted = app.process_stream_segment(
+            CompletedStreamSegment(raw_path, "test", transcript="draft transcript"),
+            options,
+            include_mode_prompt=True,
+            photo_tracker=app.PhotoUploadTracker(),
+            round_context="",
+            behavior_state=app.BehaviorState(),
+            final_transcriber=final_transcriber,
+        )
+
+        assert not submitted
+        assert final_transcriber.path == raw_path
+        assert not raw_path.exists()
+
+
+def test_finalize_segment_transcript_falls_back_to_streamed_text_on_error() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        raw_path = Path(temp_dir) / "stream-segment-0001.wav"
+        write_wav_file(raw_path, [silent_chunk()])
+        final_transcriber = FinalizingTranscriber("", raise_error=True)
+
+        transcript = app.finalize_segment_transcript(
+            raw_path,
+            "draft transcript",
+            final_transcriber,
+        )
+
+        assert transcript == "draft transcript"
 
 
 def test_transcription_worker_uses_snapshot_audio_and_cleans_temp_files() -> None:
@@ -124,6 +175,8 @@ def test_semantic_worker_classifies_stabilized_text() -> None:
 
 def main() -> None:
     test_process_stream_segment_uses_streamed_transcript_and_raw_audio()
+    test_process_stream_segment_prefers_finalized_transcript_when_available()
+    test_finalize_segment_transcript_falls_back_to_streamed_text_on_error()
     test_transcription_worker_uses_snapshot_audio_and_cleans_temp_files()
     test_semantic_worker_classifies_stabilized_text()
     print("streaming pipeline tests passed")

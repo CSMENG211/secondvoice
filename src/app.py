@@ -9,7 +9,6 @@ from loguru import logger
 
 from audio import (
     CompletedStreamSegment,
-    is_repetitive_transcript,
     stream_utterance_segments,
 )
 from audio.constants import (
@@ -21,6 +20,8 @@ from gpt import submit_to_chatgpt
 from speech.constants import (
     DEFAULT_ENDPOINT_TRANSCRIPTION_BACKEND,
     DEFAULT_ENDPOINT_TRANSCRIPTION_MODEL,
+    DEFAULT_FINAL_TRANSCRIPTION_BACKEND,
+    DEFAULT_FINAL_TRANSCRIPTION_MODEL,
 )
 from gpt import ensure_context_templates, load_round_context
 from gpt.prompts import BehaviorState, build_stream_prompt, parse_actual_story_id
@@ -79,6 +80,15 @@ def stream_loop(options: RuntimeOptions) -> None:
             DEFAULT_ENDPOINT_TRANSCRIPTION_BACKEND,
             stream_transcription_model,
         )
+        final_transcription_model = model_path_for_run(
+            DEFAULT_FINAL_TRANSCRIPTION_BACKEND,
+            DEFAULT_FINAL_TRANSCRIPTION_MODEL,
+            use_local_cache=True,
+        )
+        final_transcriber = create_transcriber(
+            DEFAULT_FINAL_TRANSCRIPTION_BACKEND,
+            final_transcription_model,
+        )
         recorder = start_stream_recorder(
             Path(temp_dir),
             segment_queue,
@@ -106,6 +116,7 @@ def stream_loop(options: RuntimeOptions) -> None:
                     photo_tracker=photo_tracker,
                     round_context=round_context,
                     behavior_state=behavior_state,
+                    final_transcriber=final_transcriber,
                 )
                 if submitted:
                     is_first_submission = False
@@ -165,21 +176,24 @@ def process_stream_segment(
     photo_tracker: PhotoUploadTracker,
     round_context: str,
     behavior_state: BehaviorState,
+    final_transcriber: Transcriber | None = None,
 ) -> bool:
     """Transcribe one stream segment and optionally submit it for feedback."""
     audio_path = segment.path
     try:
         transcript = segment.transcript
+        if final_transcriber is not None:
+            transcript = finalize_segment_transcript(
+                audio_path,
+                transcript,
+                final_transcriber,
+            )
     finally:
         audio_path.unlink(missing_ok=True)
     print_transcript(transcript)
 
     if not transcript:
         logger.info("No speech detected. Listening again.")
-        return False
-
-    if is_repetitive_transcript(transcript):
-        logger.info("Skipping transcript because it appears repetitive or garbled.")
         return False
 
     if options.ask_chatgpt:
@@ -207,6 +221,34 @@ def process_stream_segment(
             photo_tracker.last_signature = photo_signature
     logger.info("")
     return options.ask_chatgpt
+
+
+def finalize_segment_transcript(
+    audio_path: Path,
+    streamed_transcript: str,
+    final_transcriber: Transcriber,
+) -> str:
+    """Upgrade one completed segment transcript from the saved full WAV when possible."""
+    try:
+        final_transcript = final_transcriber.transcribe(audio_path, log_progress=False).strip()
+    except Exception as exc:
+        logger.warning(
+            "Final transcript pass failed for {}: {}. Falling back to live transcript.",
+            audio_path.name,
+            exc,
+        )
+        return streamed_transcript
+
+    if not final_transcript:
+        logger.warning(
+            "Final transcript pass returned empty text for {}. Falling back to live transcript.",
+            audio_path.name,
+        )
+        return streamed_transcript
+
+    if final_transcript != streamed_transcript:
+        logger.info("Using finalized transcript from saved segment audio.")
+    return final_transcript
 
 
 def print_stream_mode_banner(options: RuntimeOptions) -> None:
