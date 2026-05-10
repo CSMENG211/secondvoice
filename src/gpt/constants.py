@@ -38,10 +38,13 @@ ROUND_PROMPTS = {
     "design": (
         f"{COMMON_RULES}\n\n"
         "System design response contract:\n"
-        "- Walk through in this order: functional requirements, "
-        "non-functional requirements, data model, API design, high-level "
-        "architecture, deep-dive tradeoff.\n"
-        "- Keep each bullet actionable and concise.\n"
+        "- Follow the latest transcribed segment closely first.\n"
+        "- First give one short bullet summarizing the current design topic or question being discussed.\n"
+        "- Then give one short bullet with the best direct answer the interviewee should say next.\n"
+        "- Then give exactly 2 possible deep-dive topics.\n"
+        "- For each deep-dive topic, explain why it is relevant now and the brief direction the deep dive should go.\n"
+        "- Prefer the most relevant tradeoffs from the round context over generic system design coverage.\n"
+        "- Keep bullets concise, practical, and tightly tied to the transcript.\n"
     ),
     "offer": (
         f"{COMMON_RULES}\n\n"
