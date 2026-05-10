@@ -1,73 +1,93 @@
 # System Design Context
 
-Use these notes by interview phase. During a live round, first identify which phase the conversation is in, then pull only the most relevant prompts and tradeoffs from that section.
+Use these notes by interview phase. During a live round, first privately infer and identify which phase the conversation is in, then pull only the most relevant prompts and tradeoffs from that section.
 
 ## 1. Question Phase
 
-### Restate the Problem
-- Confirm the product/user action being designed.
-- State the primary entities and the core user journey in one sentence.
-- Ask whether the interviewer wants a broad end-to-end design or a focused subsystem.
-
-### Scope Control
-- Clarify whether this is real-time, near-real-time, or high-latency/batch.
-- Clarify whether the product is read-heavy, write-heavy, or mixed.
-- Clarify expected scale early: active users, QPS, data size, fanout size, geographic scope.
-- Identify whether the system is user-facing, internal, or infrastructure.
-
-### Early Tradeoff Framing
-- Mention that different endpoints can prioritize different properties, such as availability vs consistency.
-- Mention "transaction" for dual-write-sensitive workflows, then save details for deep dive.
-- If the problem involves files, feeds, payments, notifications, or location, call out the likely hard part early.
-
 ## 2. Clarify Functional Requirements
+- Summarize the key requirements in one sentence
+- Summarize the system under design in one sentence
 
-### User Actions
-- Create/update/delete core objects.
-- Read/list/search core objects.
-- Follow/subscribe/join/leave when there is a relationship graph.
-- Upload/download when files or media are involved.
-- Send/receive/acknowledge when messaging or notifications are involved.
+## 3. Clarify Nonfunctional Requirements
+- Clarify number of active users
+- Real time vs. High Latency 
+- Availablity vs Consistency
+  -  Different endpoints can prioritize different property
+- Is Auditability, Durability or Security relevant?
 
-### Realtime vs Pull
+## 4. Data Model
+- Core entities only
+- Mention derived entities, relationship entites as needed
+  - Derived entity: twitter timeline. inbox in chat applications
+  - relationship entity: Follow relations. UserChat or DeviceChat
+
+## 5. API Design
+- Use REST-style endpoints with standard HTTP methods:
+  - `GET` for reads
+  - `POST` for creates/actions
+  - `PUT/PATCH` for updates
+  - `DELETE` for deletes
+- For each endpoint, state:
+  - path
+  - request body or query params
+  - response shape
+  - key error cases
+- Pagination if needed
+
+## 6. Architecture
+
+## 7. Deep Dive
+
+### Pull vs Push
 - Pull:
   - Simple.
   - Wasteful when updates are infrequent.
 - Push:
   - Faster content delivery.
-  - More complex because the server must maintain user -> machine:port/session mapping.
+  - More complex (server must maintain user -> machine:port/session mapping).
 
-### API Pagination
-- Use cursor pagination for large or changing result sets.
-- Prefer stable sort keys and tie breakers.
-- Define page size and next cursor behavior.
+### Sharding: Item vs User
+- Shard by item:
+  - Even item distribution.
+  - User list queries require scatter-gather.
+- Shard by user:
+  - Single-shard user queries.
+  - Hotspot risk for VIP/high-traffic users.
+- Hotspot mitigation:
+  - Add salt to key (if hotkeys are predictable).
+  - Move hotspots to idle servers.
+  - Rate limit.
+  - Queue + batch operations.
 
-### File Upload and Download
-- Blob storage for large files.
-- Chunking upload/download.
-- File versioning.
-- Compression before uploading.
-- Hot vs cold storage.
-- CDN for download-heavy paths.
+### Fanout and read vs write
 
-## 3. Clarify Nonfunctional Requirements
+### Idempotency
+- Client-generated UUID across retries (or server-issued).
+- Scope dedup key under entity (e.g., `user_id + idempotency_key`).
+- Validate same key => same request intent.
+- Expire keys (e.g., 24h or 7d).
+- Canonical intent keys examples:
+  - `user_uuid + trip_uuid`
+  - hash of canonical request payload
+- For webhooks/queues/CDC, use upstream event IDs.
 
-### Availability vs Consistency
-- Different endpoints can prioritize different properties.
-- Strong consistency for money, ownership, permissions, and read-your-own-write-sensitive workflows.
-- Eventual consistency for feeds, counters, analytics, and recommendations when acceptable.
+### Transactions
+- Shard-local transactions.
+- Cross-shard transactions.
+- 2PC with transaction coordinator when required.
+- Optimistic Concurrency Control (versioning/CAS)
 
-### Latency and Throughput
-- Define p50/p95/p99 expectations.
-- Separate write latency from read latency.
-- Call out whether batching is acceptable.
+### Lease
+- Monotonic fencing token per lock acquisition.
+- Advance accepted epoch only when business state/outbox commit succeeds.
+- Practical ownership = whoever successfully advances state.
+- Keep lease churn away from hot resource rows.
+- Delayed queue for expiring leases
 
-### Reliability
-- Regional failover.
-- Exponential backoff + jitter to avoid retry storms.
-- Load shedding for low-priority requests.
-- RPC timeouts.
-- Circuit breaker to stop hammering failing dependencies.
+### Message Ordering
+  - Per-entity message ordering
+  - bounded buffering 
+  - reconciliation 
 
 ### Read Heavy vs Write Heavy
 - Read heavy:
@@ -77,16 +97,17 @@ Use these notes by interview phase. During a live round, first identify which ph
   - Batch writes.
   - Prefer NoSQL when high throughput and horizontal scale are required.
 
-### Read Your Own Writes
-- Use strong-read semantics from leader when needed.
-- Route the user's immediate follow-up read to the write leader or use session/version tokens.
+### Cache Strategy
+- Use cache for hot read paths and latency reduction.
+- Keep invalidation strategy explicit.
+- Prefer cache + replication for read-heavy services.
+- CDN
 
-## 4. Data Model
-
-### Entity and Relationship Modeling
-- Name the core tables/collections before optimizing.
-- Include primary keys, foreign keys/entity references, timestamps, and status fields.
-- Decide whether relationship queries are user-centric or item-centric.
+### Microservice Split Heuristics
+- Split by load characteristics.
+- Split by workflow type:
+  - IO-bound paths
+  - CPU-bound paths
 
 ### SQL vs NoSQL vs In-Memory KV
 - SQL:
@@ -100,55 +121,12 @@ Use these notes by interview phase. During a live round, first identify which ph
   - Very fast.
   - Suitable for relatively small working sets.
 
-### Sharding: Item vs User
-- Shard by item:
-  - Even item distribution.
-  - User list queries require scatter-gather.
-- Shard by user:
-  - Single-shard user queries.
-  - Hotspot risk for VIP/high-traffic users.
-- Hotspot mitigation:
-  - Add salt to key if hot keys are predictable.
-  - Move hotspots to idle servers.
-  - Rate limit.
-  - Queue + batch operations.
-
-### Transactions
-- Shard-local transactions.
-- Cross-shard transactions.
-- 2PC with transaction coordinator when required.
-- Optimistic Concurrency Control (versioning/CAS).
-
-### Event Timestamp vs Processing Timestamp
-- Event timestamp:
-  - Reflects real-world event time.
-  - More complex because of stragglers and watermarks.
-  - Better retry/backfill consistency.
-  - Higher latency/memory when waiting for late data.
-- Processing timestamp:
-  - Simpler and lower latency.
-  - Trusted server time.
-  - Less accurate for real-world ordering.
-  - Not replay-reproducible unless externalized.
-
-## 5. API Design
-
-### API Shape
-- Start with the key read and write endpoints.
-- Include idempotency keys for retried writes.
-- Include pagination params for list endpoints.
-- Include auth context and ownership checks.
-- Define request/response status fields for async workflows.
-
-### Idempotency
-- Client-generated UUID across retries or server-issued key.
-- Scope dedup key under entity, for example `user_id + idempotency_key`.
-- Validate same key => same request intent.
-- Expire keys, for example 24h or 7d.
-- Canonical intent key examples:
-  - `user_uuid + trip_uuid`
-  - Hash of canonical request payload.
-- For webhooks/queues/CDC, use upstream event IDs.
+### Prevent Cascading Failures
+- Regional failover.
+- Exponential backoff + jitter to avoid retry storms.
+- Load shedding for low-priority requests.
+- RPC timeouts.
+- Circuit breaker to stop hammering failing dependencies.
 
 ### Queue vs RPC
 - Queue:
@@ -163,64 +141,27 @@ Use these notes by interview phase. During a live round, first identify which ph
   - Tighter coupling and greater dependency-failure blast radius.
 
 ### Dual Write Risks
+- Just mention "transaction" in the initial design. Deep dive later.
 - No single source of truth.
 - One side can fail and corrupt consistency.
 - Use retries + idempotency.
-- Prefer transactional outbox or event history when workflow correctness matters.
 
-## 6. Architecture
+### Read Your Own Writes
+- Use strong-read semantics from leader when needed.
 
-### Basic Architecture Flow
-- Client/API gateway.
-- Service layer split by workflow and load.
-- Primary datastore.
-- Cache for hot reads.
-- Queue/event bus for async work.
-- Worker fleet for expensive or retryable tasks.
-- Object storage/CDN for large blobs.
-- Observability for metrics/logs/tracing.
+### Event Timestamp vs Processing Timestamp
+- Event timestamp:
+  - Reflects real-world event time.
+  - More complex (stragglers, watermarks).
+  - Better retry/backfill consistency.
+  - Higher latency/memory when waiting for late data.
+- Processing timestamp:
+  - Simpler and lower latency.
+  - Trusted server time.
+  - Less accurate for real-world ordering.
+  - Not replay-reproducible unless externalized.
 
-### Microservice Split Heuristics
-- Split by load characteristics.
-- Split by workflow type:
-  - IO-bound paths.
-  - CPU-bound paths.
-- Keep the first pass simple; split only where scaling, ownership, or failure isolation demands it.
-
-### Cache Strategy
-- Use cache for hot read paths and latency reduction.
-- Keep invalidation strategy explicit.
-- Prefer cache + replication for read-heavy services.
-- CDN for static or media-heavy reads.
-
-### Fanout and Read vs Write
-- Fanout-on-write:
-  - Fast reads.
-  - Expensive writes.
-  - Good when reads dominate and fanout is bounded.
-- Fanout-on-read:
-  - Simple writes.
-  - Expensive reads.
-  - Good when writes dominate or fanout is huge.
-- Hybrid:
-  - Precompute for normal users.
-  - Pull or rank dynamically for celebrities/hot keys.
-
-### Message Ordering
-- Per-entity message ordering.
-- Bounded buffering.
-- Reconciliation for late or out-of-order events.
-
-## 7. Deep Dive
-
-### Lease
-- Monotonic fencing token per lock acquisition.
-- Advance accepted epoch only when business state/outbox commit succeeds.
-- Practical ownership = whoever successfully advances state.
-- Keep lease churn away from hot resource rows.
-- Delayed queue for expiring leases.
-
-### Fault Tolerance for In-Memory State
+### Fault Tolerance for In-memory State
 - Snapshot in-memory state with watermark.
 - Recover from latest snapshot, then replay after watermark.
 - If history is short, full replay is acceptable.
@@ -232,22 +173,6 @@ Use these notes by interview phase. During a live round, first identify which ph
   - Poor explainability of transitions.
 - Event-driven tradeoff:
   - Replay/materialization complexity can be overkill for simple flows.
-
-### Eager vs Lazy Detection of Expiry
-- Eager:
-  - Better user-visible freshness.
-  - More background work and timer management.
-- Lazy:
-  - Simpler and cheaper.
-  - Expired state may remain until touched.
-
-### Lambda Architecture - Fast vs Slow
-- Fast path:
-  - Low latency and approximate/incremental.
-  - More operational complexity.
-- Slow path:
-  - Accurate, replayable, and good for correction/backfill.
-  - Higher latency.
 
 ### Workflow Engine Script (Payments Example)
 
@@ -274,3 +199,15 @@ Once the lease expires, another healthy worker can pick up the task and continue
 
 So the overall idea is:
 the event history store records what has happened, the task queue holds what to do next, callbacks and timers append new facts, and workers can always resume safely from durable history.
+
+### Eager vs Lazy detection of expiry
+
+### Lambda architecture - fast vs. slow
+
+### File upload and download
+- Blob storage for large files
+- Chucking upload/download
+- File versioning
+- Compression before uploading
+- Hot vs cold storage
+- CDN
