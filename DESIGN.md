@@ -91,6 +91,8 @@ Behavioral mode keeps an in-memory set of story IDs used during the current run.
 
 Design mode keeps an in-memory set of proposed deep-dive topic IDs during the current run. The prompt includes `Used Design Deep Dive Topic IDs:` on every design segment, and `parse_design_deep_dive_topic_ids()` reads the machine-parsable metadata bullet returned by ChatGPT.
 
+Design mode also asks ChatGPT to silently infer the current system-design phase: question phase, clarify functional requirement, clarify nonfunctional requirement, data model, API design, architecture, or deep dive. Suggested deep-dive topics should be specific to that inferred phase and should not jump ahead unless the transcript has already moved there. The repo-local `context/design.md` is organized under the same phase headings.
+
 ### 4. Photo Context Paths
 
 The `--photo-mode` flag controls whether the main app captures and uploads photos.
