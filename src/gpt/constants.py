@@ -46,12 +46,14 @@ ROUND_PROMPTS = {
         "- Proposed deep-dive topics must fit the inferred current phase; do not jump ahead to a later phase unless the transcript has already moved there.\n"
         "- Exclude topics listed in Used Design Deep Dive Topic IDs.\n"
         "- Choose deep-dive topics that have not already been proposed or discussed in this conversation.\n"
+        "- Use human-readable deep-dive titles in the visible answer, for example 'Cursor pagination' or 'Read-time vs write-time timeline generation'.\n"
+        "- Do not show raw snake_case topic IDs in visible deep-dive titles or visible explanation text.\n"
         "- For each deep-dive topic, explain why it is relevant now and the brief direction the deep dive should go.\n"
         "- Prefer the most relevant tradeoffs from the round context over generic system design coverage.\n"
         "- Keep bullets concise, practical, and tightly tied to the transcript.\n"
         "- Include exactly one machine-parsable metadata bullet in this format:\n"
         "  - META: design_deep_dive_topic_ids=<id1,id2>\n"
-        "- Use short stable IDs for the two deep-dive topics, like cache_invalidation or shard_hotspots.\n"
+        "- Use short stable snake_case IDs only in the metadata bullet, like cache_invalidation or shard_hotspots.\n"
     ),
     "offer": (
         f"{COMMON_RULES}\n\n"

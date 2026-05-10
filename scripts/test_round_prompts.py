@@ -71,6 +71,9 @@ def test_design_state_and_deep_dive_topic_parsing() -> None:
     assert "Silently infer the current phase of the system design round" in prompt
     assert "question phase, clarify functional requirement, clarify nonfunctional requirement" in prompt
     assert "Proposed deep-dive topics must fit the inferred current phase" in prompt
+    assert "Use human-readable deep-dive titles in the visible answer" in prompt
+    assert "Do not show raw snake_case topic IDs in visible deep-dive titles" in prompt
+    assert "Use short stable snake_case IDs only in the metadata bullet" in prompt
     assert "Exclude topics listed in Used Design Deep Dive Topic IDs." in prompt
     assert "design_deep_dive_topic_ids=<id1,id2>" in prompt
     assert "Used Design Deep Dive Topic IDs:\ncache_invalidation" in prompt
