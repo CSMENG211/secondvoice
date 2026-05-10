@@ -164,7 +164,7 @@ The recorder accepts only current results. Each job/result carries `segment_inde
 
 ### 5. Hard Silence
 
-If no semantic endpoint is accepted first, the recorder reaches `STREAM_HARD_SILENCE_SECONDS`, currently 3 seconds, and cuts the segment immediately using the latest cleaned transcript it has. This keeps the segmenter responsive without paying for a second full-pass transcription after the cut.
+If no semantic endpoint is accepted first, the recorder reaches `STREAM_HARD_SILENCE_SECONDS`, currently 2 seconds, and cuts the segment immediately using the latest cleaned transcript it has. This keeps the segmenter responsive without paying for a second full-pass transcription after the cut.
 
 ## Threading Model
 
