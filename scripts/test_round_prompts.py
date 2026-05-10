@@ -70,7 +70,11 @@ def test_design_state_and_deep_dive_topic_parsing() -> None:
     assert "System design response contract" in prompt
     assert "Silently infer the current phase of the system design round" in prompt
     assert "question phase, clarify functional requirement, clarify nonfunctional requirement" in prompt
-    assert "Proposed deep-dive topics must fit the inferred current phase" in prompt
+    assert "If the current phase is question phase, do not propose deep-dive options" in prompt
+    assert "one restating the problem in one sentence" in prompt
+    assert "one confirming the main user journey plus primary object/action" in prompt
+    assert "Only if the current phase is deep dive should you give exactly 2 possible deep-dive topics" in prompt
+    assert "If no deep-dive topic is proposed, use: - META: design_deep_dive_topic_ids=none" in prompt
     assert "Use human-readable deep-dive titles in the visible answer" in prompt
     assert "Do not show raw snake_case topic IDs in visible deep-dive titles" in prompt
     assert "Use short stable snake_case IDs only in the metadata bullet" in prompt

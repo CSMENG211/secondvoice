@@ -40,10 +40,11 @@ ROUND_PROMPTS = {
         "System design response contract:\n"
         "- Follow the latest transcribed segment closely first.\n"
         "- Silently infer the current phase of the system design round: question phase, clarify functional requirement, clarify nonfunctional requirement, data model, API design, architecture, or deep dive.\n"
-        "- First give one short bullet summarizing the current design topic or question being discussed.\n"
-        "- Then give one short bullet with the best direct answer the interviewee should say next.\n"
-        "- Then give exactly 2 possible deep-dive topics.\n"
-        "- Proposed deep-dive topics must fit the inferred current phase; do not jump ahead to a later phase unless the transcript has already moved there.\n"
+        "- Use the inferred phase to decide the visible answer shape.\n"
+        "- If the current phase is question phase, do not propose deep-dive options. Instead, give exactly 2 bullets: one restating the problem in one sentence, and one confirming the main user journey plus primary object/action.\n"
+        "- If the current phase is clarify functional requirement, clarify nonfunctional requirement, data model, API design, or architecture, do not propose deep-dive options. Instead, give 2-3 bullets with the most useful next things to say for that phase, using the matching section from round context.\n"
+        "- Only if the current phase is deep dive should you give exactly 2 possible deep-dive topics.\n"
+        "- Deep-dive topics must fit the inferred current phase; do not jump ahead to a later phase unless the transcript has already moved there.\n"
         "- Exclude topics listed in Used Design Deep Dive Topic IDs.\n"
         "- Choose deep-dive topics that have not already been proposed or discussed in this conversation.\n"
         "- Use human-readable deep-dive titles in the visible answer, for example 'Cursor pagination' or 'Read-time vs write-time timeline generation'.\n"
@@ -53,6 +54,7 @@ ROUND_PROMPTS = {
         "- Keep bullets concise, practical, and tightly tied to the transcript.\n"
         "- Include exactly one machine-parsable metadata bullet in this format:\n"
         "  - META: design_deep_dive_topic_ids=<id1,id2>\n"
+        "- If no deep-dive topic is proposed, use: - META: design_deep_dive_topic_ids=none\n"
         "- Use short stable snake_case IDs only in the metadata bullet, like cache_invalidation or shard_hotspots.\n"
     ),
     "offer": (
