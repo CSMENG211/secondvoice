@@ -32,6 +32,7 @@ from audio.constants import (
     AUDIO_CHUNK_SECONDS,
     AUDIO_SAMPLE_RATE,
     DEFAULT_SILENCE_THRESHOLD,
+    STREAM_BACKGROUND_POLL_SECONDS,
     STREAM_HARD_SILENCE_SECONDS,
     STREAM_TRANSCRIPTION_INTERVAL_SECONDS,
     STREAM_TRANSCRIPT_AGREEMENT_COUNT,
@@ -113,11 +114,16 @@ class StreamSegmenter:
         self.speech_detector = StreamSpeechDetector(silence_threshold)
 
         self.blocksize = audio_blocksize()
+        self.background_poll_blocks = block_count_for_seconds(
+            STREAM_BACKGROUND_POLL_SECONDS
+        )
         self.hard_silence_blocks_needed = block_count_for_seconds(hard_silence_seconds)
         self.pre_roll = create_pre_roll_buffer()
         self.recorded_chunks: list[bytes] = []
         self.segment_chunks = 0
         self.silent_blocks = 0
+        self.blocks_since_background_poll = 0
+        self.pending_overflow_blocks = 0
         self.semantic_check_in_flight = False
         self.semantic_pause_index = 0
         self.last_transcription_job_chunks = 0
@@ -214,9 +220,12 @@ class StreamSegmenter:
                 data, overflowed = stream.read(self.blocksize)
                 chunk = bytes(data)
                 if overflowed:
-                    logger.warning("Audio warning: input overflowed")
+                    self.pending_overflow_blocks += 1
+                else:
+                    self.flush_overflow_warning()
 
                 self.handle_audio_chunk(chunk)
+        self.flush_overflow_warning()
 
     def handle_audio_chunk(self, chunk: bytes) -> None:
         """Process one raw audio chunk."""
@@ -230,11 +239,14 @@ class StreamSegmenter:
 
         self.write_segment_chunks([chunk])
         self.update_silence_state(is_speech)
+        self.blocks_since_background_poll += 1
 
-        if self.handle_transcription_results():
-            return
-        if self.handle_semantic_endpoint_results():
-            return
+        if self.should_poll_background_results():
+            self.blocks_since_background_poll = 0
+            if self.handle_transcription_results():
+                return
+            if self.handle_semantic_endpoint_results():
+                return
 
         if self.should_queue_transcription_check():
             self.queue_transcription_check()
@@ -262,6 +274,7 @@ class StreamSegmenter:
         self.locked_chunk_index = 0
         self.last_semantic_transcript_key = ""
         self.speech_detector.mark_speech()
+        self.blocks_since_background_poll = 0
 
     def finish_active_segment(self) -> None:
         """Queue the active segment during shutdown, if any."""
@@ -284,6 +297,7 @@ class StreamSegmenter:
         self.last_semantic_transcript_key = ""
         self.pre_roll.clear()
         self.speech_detector.reset()
+        self.blocks_since_background_poll = 0
         logger.info("Waiting for audio input...")
 
     def finish_segment(self) -> None:
@@ -333,6 +347,24 @@ class StreamSegmenter:
             self.semantic_check_in_flight = False
         else:
             self.silent_blocks += 1
+
+    def should_poll_background_results(self) -> bool:
+        """Poll worker result queues in small batches instead of every audio block."""
+        if self.blocks_since_background_poll >= self.background_poll_blocks:
+            return True
+        return self.silent_blocks > 0 or self.semantic_check_in_flight
+
+    def flush_overflow_warning(self) -> None:
+        """Log one aggregated warning for one burst of input overflows."""
+        if self.pending_overflow_blocks <= 0:
+            return
+        overflow_seconds = self.pending_overflow_blocks * AUDIO_CHUNK_SECONDS
+        logger.warning(
+            "Audio warning: input overflowed {} block(s) over {:.1f}s.",
+            self.pending_overflow_blocks,
+            overflow_seconds,
+        )
+        self.pending_overflow_blocks = 0
 
     def should_queue_transcription_check(self) -> bool:
         """Return whether enough new audio has arrived for another ASR snapshot."""
