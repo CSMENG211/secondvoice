@@ -8,6 +8,7 @@ import wave
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import app
+import speech.transcription as transcription
 from audio import (
     CompletedStreamSegment,
     SemanticEndpointJob,
@@ -129,6 +130,15 @@ def test_combine_locked_and_tail_transcript_deduplicates_overlap() -> None:
     assert transcript == "I would use a hash map because lookup is constant time"
 
 
+def test_mlx_transcribers_share_process_lock() -> None:
+    first = transcription.MlxWhisperTranscriber("dummy-model")
+    second = transcription.MlxWhisperTranscriber("dummy-model")
+
+    assert not hasattr(first, "_lock")
+    assert not hasattr(second, "_lock")
+    assert isinstance(transcription._MLX_TRANSCRIBE_LOCK, type(threading.Lock()))
+
+
 def test_transcription_worker_uses_snapshot_audio_and_cleans_temp_files() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         output_dir = Path(temp_dir)
@@ -202,6 +212,7 @@ def main() -> None:
     test_process_stream_segment_prefers_finalized_transcript_when_available()
     test_finalize_segment_transcript_falls_back_to_streamed_text_on_error()
     test_combine_locked_and_tail_transcript_deduplicates_overlap()
+    test_mlx_transcribers_share_process_lock()
     test_transcription_worker_uses_snapshot_audio_and_cleans_temp_files()
     test_semantic_worker_classifies_stabilized_text()
     print("streaming pipeline tests passed")

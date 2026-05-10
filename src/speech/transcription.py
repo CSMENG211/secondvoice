@@ -19,6 +19,8 @@ from speech.constants import (
 DEFAULT_BACKEND = DEFAULT_FINAL_TRANSCRIPTION_BACKEND
 DEFAULT_MODEL = DEFAULT_FINAL_TRANSCRIPTION_MODEL
 
+_MLX_TRANSCRIBE_LOCK = threading.Lock()
+
 
 class Transcriber(Protocol):
     """Common interface for local speech-to-text backends."""
@@ -133,7 +135,6 @@ class MlxWhisperTranscriber:
     def __init__(self, model: str = DEFAULT_FINAL_TRANSCRIPTION_MODEL) -> None:
         """Store the configured MLX model name for lazy transcription."""
         self.model = model
-        self._lock = threading.Lock()
         if Path(model).expanduser().exists():
             logger.debug("Configured mlx-whisper model from local cache: {}", model)
         else:
@@ -152,7 +153,7 @@ class MlxWhisperTranscriber:
                 "`pip install -r requirements.txt`."
             ) from exc
 
-        with self._lock:
+        with _MLX_TRANSCRIBE_LOCK:
             if log_progress:
                 logger.info("Decoding audio with mlx-whisper...")
 
