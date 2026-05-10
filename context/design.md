@@ -3,23 +3,27 @@
 Use these notes by interview phase. During a live round, first privately infer and identify which phase the conversation is in, then pull only the most relevant prompts and tradeoffs from that section.
 
 ## 1. Question Phase
+- Restate the problem in one sentence
+- Confirm the main user journey and the primary object/action
 
 ## 2. Clarify Functional Requirements
 - Summarize the key requirements in one sentence
 - Summarize the system under design in one sentence
+- Ask for must-have vs nice-to-have features if scope is broad
 
 ## 3. Clarify Nonfunctional Requirements
 - Clarify number of active users
-- Real time vs. High Latency 
-- Availablity vs Consistency
-  -  Different endpoints can prioritize different property
-- Is Auditability, Durability or Security relevant?
+- Realtime vs high latency
+- Availability vs consistency
+  - Different endpoints can prioritize different properties
+- Clarify latency, throughput, QPS, and data size if relevant
+- Is auditability, durability, or security relevant?
 
 ## 4. Data Model
-- Core entities only
-- Mention derived entities, relationship entites as needed
-  - Derived entity: twitter timeline. inbox in chat applications
-  - relationship entity: Follow relations. UserChat or DeviceChat
+- Core entities first
+- Mention derived entities and relationship entities as needed
+  - Derived entity: Twitter timeline, inbox in chat applications
+  - Relationship entity: follow relation, UserChat, DeviceChat
 
 ## 5. API Design
 - Use REST-style endpoints with standard HTTP methods:
@@ -32,9 +36,16 @@ Use these notes by interview phase. During a live round, first privately infer a
   - request body or query params
   - response shape
   - key error cases
-- Pagination if needed
+- For list endpoints, use pagination when needed:
+  - `limit`
+  - `cursor`
+  - `next_cursor`
+  - stable ordering
 
 ## 6. Architecture
+- Start with a simple end-to-end flow
+- Include clients, API gateway/load balancer, services, storage and workers as needed
+- Mention read path and write path separately if the system is complex
 
 ## 7. Deep Dive
 
@@ -206,7 +217,7 @@ the event history store records what has happened, the task queue holds what to 
 
 ### File upload and download
 - Blob storage for large files
-- Chucking upload/download
+- Chunking upload/download
 - File versioning
 - Compression before uploading
 - Hot vs cold storage
