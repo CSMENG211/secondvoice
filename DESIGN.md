@@ -4,12 +4,13 @@ SecondVoice is a local mock-interview assistant. It listens to microphone audio,
 
 The application is intentionally small and file-oriented. `main.py` handles command-line setup, `src/preflight.py` checks local dependencies, and `src/app.py` coordinates the stream runtime across focused packages for audio capture, speech processing, prompt construction, photo handling, camera capture, browser automation, constants, and logging.
 
-Completed stream segments now carry the transcript produced by a single streaming ASR path. The app still preserves the raw WAV for speaker matching and debugging, but it no longer performs one Whisper pass for endpoint drafts and a second Whisper pass after segment completion.
+Completed stream segments now carry the latest streaming transcript plus the locked transcript prefix boundary produced by the live ASR path. The app still preserves the raw WAV for debugging, and it is designed to transcribe audio once as much as possible: after segment completion, it re-transcribes only the unresolved audio tail, allowing a small overlap before the locked boundary to improve stitching.
 
 ## Goals
 
 - Capture mock-interview speech with minimal manual control.
 - Keep transcription local through `mlx-whisper` by default.
+- Transcribe audio once as much as possible, allowing only small overlap re-transcription around stabilized transcript boundaries when needed for accuracy.
 - Preserve interviewer context across ChatGPT submissions by sending an initial mode prompt and then incremental transcript segments.
 - Help ChatGPT distinguish interviewer and interviewee speech with an optional enrolled voice hint.
 - Add visual problem-board context through test or live camera photos when enabled.
@@ -40,12 +41,12 @@ This is the default path.
 4. `start_stream_recorder()` starts a background thread running `audio.stream_utterance_segments()`.
 5. If photo capture is enabled, `photo.start_photo_timer()` starts a second background thread running `capture_photos_on_interval()`.
 6. The main thread loads the configured endpoint and final transcribers, `SpeakerIdentifier`, and `PhotoUploadTracker`.
-7. During recording, `StreamSegmenter` owns segment boundaries. It uses RMS speech activity, a single streaming transcription worker, transcript-agreement stabilization, and semantic endpoint checks on the stabilized transcript buffer as it evolves. Transcript cleanup is deterministic: repeated ASR tails are trimmed before semantic classification or final submission; fully repetitive transcripts are skipped.
+7. During recording, `StreamSegmenter` owns segment boundaries. It uses RMS speech activity, a single streaming transcription worker, transcript-agreement stabilization, and semantic endpoint checks on the stabilized transcript buffer as it evolves.
 8. For every queued completed segment, `process_stream_segment()`:
-   - Builds a speaker hint from the WAV file.
-   - Reads the stabilized transcript already attached to the completed segment.
+   - Reads the latest transcript plus locked transcript prefix metadata already attached to the completed segment.
+   - Runs one final transcription pass over only the unresolved tail audio, with a small overlap before the locked boundary when available.
    - Deletes the temporary raw WAV segment.
-   - Prints the transcript and speaker hint.
+   - Prints the finalized transcript.
    - Logs whether the segment ended by semantic completion, hard silence, or shutdown.
    - Builds a ChatGPT prompt.
    - Attaches a photo only when the selected photo exists and changed since the last successful upload.
@@ -117,8 +118,8 @@ Microphone
   -> temporary WAV segment
   -> streaming transcript snapshots
   -> semantic completion classification on stabilized transcript
+  -> tail-only final transcription with small overlap before locked boundary
   -> app.process_stream_segment()
-  -> speech.SpeakerIdentifier.match()
   -> gpt.build_stream_prompt()
   -> optional photo selected by vision.next_photo_upload()
   -> gpt.submit_to_chatgpt()
@@ -143,28 +144,23 @@ Microphone
 
 Recording starts when RMS audio crosses `DEFAULT_SILENCE_THRESHOLD`. Once a segment is active, `StreamSpeechDetector` uses a lower continuation threshold plus a short hangover so quiet syllables and tiny gaps do not immediately count as silence.
 
-### 2. Transcript Cleanup
-
-Cleanup is deterministic. There is no local LLM gibberish classifier. `trim_repetitive_transcript_suffix(...)` removes only trailing ASR repetition loops while preserving useful prefixes; fully repetitive transcripts become empty and are skipped. The suffix detector uses low vocabulary diversity as the main signal, with repeated bigram and trigram coverage as supporting signals, so variant loops do not have to repeat the exact same three-word phrase.
-
-Cleanup runs in two places:
-
-- streaming transcript snapshots, before semantic classification
-- final completed-segment transcripts, before ChatGPT submission
-
-### 3. Streaming Transcription
+### 2. Streaming Transcription
 
 While a segment is active, the recorder periodically snapshots the current audio into a transcription worker. The worker runs a single ASR path and returns cleaned draft transcripts. `StreamSegmenter` keeps the latest cleaned transcript plus an agreement counter. When the same normalized draft arrives `STREAM_TRANSCRIPT_AGREEMENT_COUNT`, currently 2, times in a row, the transcript is treated as stabilized.
 
-### 4. Semantic Endpoint Check
+### 3. Semantic Endpoint Check
 
 When the stabilized transcript buffer changes (after `n`-agreement), the recorder queues a semantic endpoint check using the locked transcript text itself. The semantic worker asks Ollama `qwen2.5:1.5b` whether that stabilized transcript is `COMPLETE` or `INCOMPLETE`.
 
 The recorder accepts only current results. Each job/result carries `segment_index` and `pause_index`; if the segment already ended or a newer pause began, the old result is stale and ignored. A `COMPLETE` result is accepted only when it still matches the current locked transcript key; if newer stabilized text arrived, that old `COMPLETE` result is ignored.
 
+### 4. Final Tail Transcription
+
+When a segment ends, the main thread does not re-transcribe the whole segment by default. Instead, the completed-segment payload carries the locked transcript prefix plus the chunk index where that prefix ended. The finalization step re-transcribes only the remaining tail audio, with a small overlap before the locked boundary, then stitches the tail transcript back onto the locked prefix. This keeps total transcription work close to one pass over the audio while still allowing a little redundant context at the seam.
+
 ### 5. Hard Silence
 
-If no semantic endpoint is accepted first, the recorder reaches `STREAM_HARD_SILENCE_SECONDS`, currently 2 seconds, and cuts the segment immediately using the latest cleaned transcript it has. This keeps the segmenter responsive without paying for a second full-pass transcription after the cut.
+If no semantic endpoint is accepted first, the recorder reaches `STREAM_HARD_SILENCE_SECONDS`, currently 2 seconds, and cuts the segment immediately using the latest cleaned transcript it has. The main thread then finalizes only the unresolved tail audio rather than paying for a second full-pass transcription over the whole segment.
 
 ## Threading Model
 
@@ -193,7 +189,7 @@ Main app thread
   prints/submits transcript
 ```
 
-This queue carries finished segments (or recorder exceptions). A completed segment includes the raw WAV path, stabilized transcript, and completion trigger (`semantic_complete`, `hard_silence`, or `shutdown`).
+This queue carries finished segments (or recorder exceptions). A completed segment includes the raw WAV path, latest transcript, locked transcript prefix metadata, and completion trigger.
 
 ### 2) Streaming Transcription Queues
 
@@ -214,7 +210,7 @@ Recorder thread
   tracks agreement count
 ```
 
-This replaces the older dual-pass model. There is no second full transcription pass at segment-finalization time.
+This replaces the older dual-pass model. Segment-finalization may do one extra transcription pass, but only for the unresolved tail audio and a small overlap window, not for the full segment.
 
 ### 3) Semantic Classification Queues
 
@@ -350,7 +346,7 @@ The stream-runtime orchestration layer. It owns high-level runtime paths, record
 - `stream_loop(options)`: Runs the continuous capture/transcribe/submit loop.
 - `start_stream_recorder(output_dir, segment_queue, stop_event)`: Starts audio recording in a background thread.
 - `next_stream_segment(segment_queue)`: Polls the recorder queue and raises recorder exceptions on the main thread.
-- `process_stream_segment(...)`: Handles one completed WAV segment end to end using the transcript already attached by the recorder path.
+- `process_stream_segment(...)`: Handles one completed WAV segment end to end, including tail-only final transcription before GPT submission.
 - `build_speaker_hint(audio_path, speaker_identifier)`: Produces a `SpeakerHint`, falling back to `unknown` if voice matching fails.
 - `print_speaker_hint(speaker_hint)`: Logs speaker-match information.
 - `print_stream_mode_banner(options)`: Logs active runtime settings.
@@ -386,12 +382,12 @@ Audio capture, segmentation, WAV writing, and amplitude helpers. `src/audio/__in
 
 #### `src/audio/transcript_utils.py`
 
-- `trim_repetitive_transcript_suffix(...)`: Removes repeated ASR suffix loops while preserving useful prefixes.
-- `normalize_transcript_words(...)`: Normalizes transcript text into comparable word tokens.
+- `TRANSCRIPT_WORD_PATTERN`: Shared transcript-token regex used for transcript-key normalization.
 
 #### `src/audio/wav.py`
 
 - `write_wav_file(output_path, chunks)`: Writes raw chunks into a complete WAV file, used for streaming transcription snapshots.
+- `write_wav_slice(output_path, source_path, start_frame)`: Writes one tail WAV file from a source WAV starting at a chosen frame offset.
 - `open_wav_writer(output_path)`: Opens a mono int16 WAV writer using app audio constants.
 - `write_chunks(wav_file, chunks)`: Writes raw audio chunks into a WAV file.
 

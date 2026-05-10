@@ -311,6 +311,8 @@ class StreamSegmenter:
                 path=self.segment_path,
                 completion_reason=self.pending_completion_reason,
                 transcript=self.latest_transcript,
+                locked_transcript=self.locked_transcript,
+                locked_chunk_index=self.locked_chunk_index,
             )
         )
         self.wav_file = None

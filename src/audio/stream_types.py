@@ -18,6 +18,8 @@ class CompletedStreamSegment:
     path: Path
     completion_reason: str
     transcript: str = ""
+    locked_transcript: str = ""
+    locked_chunk_index: int = 0
 
 
 @dataclass(frozen=True)

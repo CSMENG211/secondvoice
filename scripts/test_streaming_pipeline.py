@@ -3,6 +3,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+import wave
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -40,10 +41,13 @@ class FinalizingTranscriber:
         self.transcript = transcript
         self.raise_error = raise_error
         self.path: Path | None = None
+        self.frame_count: int | None = None
 
     def transcribe(self, audio_path: Path, *, log_progress: bool = True) -> str:
         self.path = audio_path
         assert audio_path.exists()
+        with wave.open(str(audio_path), "rb") as wav_file:
+            self.frame_count = wav_file.getnframes()
         if self.raise_error:
             raise RuntimeError("boom")
         return self.transcript
@@ -71,12 +75,18 @@ def test_process_stream_segment_uses_streamed_transcript_and_raw_audio() -> None
 def test_process_stream_segment_prefers_finalized_transcript_when_available() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         raw_path = Path(temp_dir) / "stream-segment-0001.wav"
-        write_wav_file(raw_path, [silent_chunk()])
+        write_wav_file(raw_path, [silent_chunk() for _ in range(5)])
         options = app.RuntimeOptions(ask_chatgpt=False)
-        final_transcriber = FinalizingTranscriber("full transcript")
+        final_transcriber = FinalizingTranscriber("hash map because lookup is constant time")
 
         submitted = app.process_stream_segment(
-            CompletedStreamSegment(raw_path, "test", transcript="draft transcript"),
+            CompletedStreamSegment(
+                raw_path,
+                "test",
+                transcript="draft transcript",
+                locked_transcript="I would use a hash map",
+                locked_chunk_index=4,
+            ),
             options,
             include_mode_prompt=True,
             photo_tracker=app.PhotoUploadTracker(),
@@ -86,8 +96,11 @@ def test_process_stream_segment_prefers_finalized_transcript_when_available() ->
         )
 
         assert not submitted
-        assert final_transcriber.path == raw_path
+        assert final_transcriber.path is not None
+        assert final_transcriber.path != raw_path
+        assert final_transcriber.frame_count == audio_blocksize() * 3
         assert not raw_path.exists()
+        assert not final_transcriber.path.exists()
 
 
 def test_finalize_segment_transcript_falls_back_to_streamed_text_on_error() -> None:
@@ -99,10 +112,21 @@ def test_finalize_segment_transcript_falls_back_to_streamed_text_on_error() -> N
         transcript = app.finalize_segment_transcript(
             raw_path,
             "draft transcript",
-            final_transcriber,
+            locked_transcript="",
+            locked_chunk_index=0,
+            final_transcriber=final_transcriber,
         )
 
         assert transcript == "draft transcript"
+
+
+def test_combine_locked_and_tail_transcript_deduplicates_overlap() -> None:
+    transcript = app.combine_locked_and_tail_transcript(
+        "I would use a hash map",
+        "hash map because lookup is constant time",
+    )
+
+    assert transcript == "I would use a hash map because lookup is constant time"
 
 
 def test_transcription_worker_uses_snapshot_audio_and_cleans_temp_files() -> None:
@@ -177,6 +201,7 @@ def main() -> None:
     test_process_stream_segment_uses_streamed_transcript_and_raw_audio()
     test_process_stream_segment_prefers_finalized_transcript_when_available()
     test_finalize_segment_transcript_falls_back_to_streamed_text_on_error()
+    test_combine_locked_and_tail_transcript_deduplicates_overlap()
     test_transcription_worker_uses_snapshot_audio_and_cleans_temp_files()
     test_semantic_worker_classifies_stabilized_text()
     print("streaming pipeline tests passed")

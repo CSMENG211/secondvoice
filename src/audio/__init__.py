@@ -19,7 +19,7 @@ from audio.stream_types import (
     TranscriptionResult,
 )
 from audio.stream_workers import run_semantic_endpoint_worker, run_transcription_worker
-from audio.wav import open_wav_writer, write_chunks, write_wav_file
+from audio.wav import open_wav_writer, write_chunks, write_wav_file, write_wav_slice
 
 __all__ = [
     "CompletedStreamSegment",
@@ -41,4 +41,5 @@ __all__ = [
     "stream_utterance_segments",
     "write_chunks",
     "write_wav_file",
+    "write_wav_slice",
 ]

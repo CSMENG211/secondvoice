@@ -9,10 +9,14 @@ from loguru import logger
 
 from audio import (
     CompletedStreamSegment,
+    audio_blocksize,
+    block_count_for_seconds,
     stream_utterance_segments,
+    write_wav_slice,
 )
 from audio.constants import (
     DEFAULT_SILENCE_THRESHOLD,
+    FINAL_TRANSCRIPTION_OVERLAP_SECONDS,
     STREAM_HARD_SILENCE_SECONDS,
     STREAM_TRANSCRIPT_AGREEMENT_COUNT,
 )
@@ -186,7 +190,9 @@ def process_stream_segment(
             transcript = finalize_segment_transcript(
                 audio_path,
                 transcript,
-                final_transcriber,
+                locked_transcript=segment.locked_transcript,
+                locked_chunk_index=segment.locked_chunk_index,
+                final_transcriber=final_transcriber,
             )
     finally:
         audio_path.unlink(missing_ok=True)
@@ -226,29 +232,93 @@ def process_stream_segment(
 def finalize_segment_transcript(
     audio_path: Path,
     streamed_transcript: str,
+    locked_transcript: str,
+    locked_chunk_index: int,
     final_transcriber: Transcriber,
 ) -> str:
-    """Upgrade one completed segment transcript from the saved full WAV when possible."""
+    """Upgrade one completed transcript by finalizing only the unresolved audio tail."""
+    tail_audio_path = build_final_transcription_audio(
+        audio_path,
+        locked_transcript=locked_transcript,
+        locked_chunk_index=locked_chunk_index,
+    )
     try:
-        final_transcript = final_transcriber.transcribe(audio_path, log_progress=False).strip()
+        final_transcript = final_transcriber.transcribe(
+            tail_audio_path,
+            log_progress=False,
+        ).strip()
     except Exception as exc:
         logger.warning(
             "Final transcript pass failed for {}: {}. Falling back to live transcript.",
-            audio_path.name,
+            tail_audio_path.name,
             exc,
         )
         return streamed_transcript
+    finally:
+        if tail_audio_path != audio_path:
+            tail_audio_path.unlink(missing_ok=True)
 
     if not final_transcript:
         logger.warning(
             "Final transcript pass returned empty text for {}. Falling back to live transcript.",
-            audio_path.name,
+            tail_audio_path.name,
         )
         return streamed_transcript
 
-    if final_transcript != streamed_transcript:
-        logger.info("Using finalized transcript from saved segment audio.")
-    return final_transcript
+    finalized_transcript = combine_locked_and_tail_transcript(
+        locked_transcript,
+        final_transcript,
+    )
+    if finalized_transcript != streamed_transcript:
+        logger.info("Using finalized transcript from saved segment audio tail.")
+    return finalized_transcript
+
+
+def build_final_transcription_audio(
+    audio_path: Path,
+    *,
+    locked_transcript: str,
+    locked_chunk_index: int,
+) -> Path:
+    """Return the best audio slice for one final transcription pass."""
+    if not locked_transcript or locked_chunk_index <= 0:
+        return audio_path
+
+    overlap_blocks = block_count_for_seconds(FINAL_TRANSCRIPTION_OVERLAP_SECONDS)
+    start_chunk_index = max(0, locked_chunk_index - overlap_blocks)
+    if start_chunk_index <= 0:
+        return audio_path
+
+    start_frame = start_chunk_index * audio_blocksize()
+    tail_audio_path = audio_path.with_name(
+        f"{audio_path.stem}-final-tail-{start_chunk_index:04d}.wav"
+    )
+    write_wav_slice(tail_audio_path, audio_path, start_frame=start_frame)
+    return tail_audio_path
+
+
+def combine_locked_and_tail_transcript(locked_transcript: str, tail_transcript: str) -> str:
+    """Merge a stabilized prefix with a tail transcript that may include overlap."""
+    locked = locked_transcript.strip()
+    tail = tail_transcript.strip()
+    if not locked:
+        return tail
+    if not tail:
+        return locked
+
+    locked_words = locked.split()
+    tail_words = tail.split()
+    max_overlap = min(len(locked_words), len(tail_words), 12)
+    for overlap in range(max_overlap, 0, -1):
+        if [word.lower() for word in locked_words[-overlap:]] == [
+            word.lower() for word in tail_words[:overlap]
+        ]:
+            tail_words = tail_words[overlap:]
+            break
+
+    if not tail_words:
+        return locked
+    return f"{locked} {' '.join(tail_words)}"
 
 
 def print_stream_mode_banner(options: RuntimeOptions) -> None:
