@@ -38,14 +38,17 @@ def test_behavior_state_and_actual_story_parsing() -> None:
         round_context="## story_id: story_a\n...\n## story_id: story_b\n...\n## story_id: story_c\n...",
         behavior_state=state,
     )
-    assert "Pick top 3 best untold stories" in prompt
-    assert "suggested_story_ids=<id1,id2,id3>" in prompt
+    assert "Pick the top 2 best untold stories" in prompt
+    assert "Do not print raw story IDs in the visible answer text." in prompt
+    assert "Do not add a 'strongest match' or restated-summary sentence under the title." in prompt
+    assert "Each bullet should help the candidate remember the story quickly" in prompt
+    assert "suggested_story_ids=<id1,id2>" in prompt
     assert "Used Story IDs:\nstory_a" in prompt
     parsed = parse_actual_story_id(
-        "- META: suggested_story_ids=story_b,story_d,story_e; actual_story_id=story_c"
+        "- META: suggested_story_ids=story_b,story_d; actual_story_id=story_c"
     )
     assert parsed == "story_c"
-    assert parse_actual_story_id("- META: suggested_story_ids=story_b,story_d,story_e; actual_story_id=unmapped") is None
+    assert parse_actual_story_id("- META: suggested_story_ids=story_b,story_d; actual_story_id=unmapped") is None
 
 
 def main() -> None:
