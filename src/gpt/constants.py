@@ -57,7 +57,6 @@ ROUND_PROMPTS = {
         "- Pick top 3 best untold stories from provided story context.\n"
         "- Exclude stories listed in Used Story IDs.\n"
         "- Rank them from strongest to weakest match.\n"
-        "- Do NOT use STAR format.\n"
         "- For each suggested story, provide: one concise summary line, then practical bullet points.\n"
         "- Include exactly one machine-parsable metadata bullet in this format:\n"
         "  - META: suggested_story_ids=<id1,id2,id3>; actual_story_id=<id_or_unmapped>\n"
