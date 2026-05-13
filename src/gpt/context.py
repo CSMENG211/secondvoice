@@ -12,6 +12,7 @@ ROUND_CONTEXT_FILES = {
     "design": "design.md",
     "behavior": "behavior.md",
     "offer": "offer.md",
+    "qa": "qa.md",
 }
 
 
@@ -63,6 +64,12 @@ def ensure_context_templates() -> None:
             "- Include past ranges and outcomes.\n\n"
             "## Constraints and Goals\n"
             "- Walk-away criteria, priorities, timeline, non-comp items.\n"
+        ),
+        "qa.md": (
+            "# Team Q&A Context\n\n"
+            "## Goal\n"
+            "- Questions and follow-ups for evaluating team fit, workload, "
+            "on-call, process, manager style, and growth.\n"
         ),
     }
     for filename, template in templates.items():

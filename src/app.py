@@ -51,7 +51,7 @@ from speech import (
 )
 
 
-InterviewRound = Literal["coding", "design", "behavior", "offer"]
+InterviewRound = Literal["coding", "design", "behavior", "offer", "qa"]
 
 
 @dataclass(frozen=True)

@@ -65,6 +65,15 @@ ROUND_PROMPTS = {
         "- Ground advice in provided offer context and candidate constraints.\n"
         "- Keep language practical and ready to speak.\n"
     ),
+    "qa": (
+        f"{COMMON_RULES}\n\n"
+        "Team Q&A response contract:\n"
+        "- Help the candidate ask thoughtful questions to an engineer on a team they may join.\n"
+        "- Ground suggestions in the provided Q&A context and the latest transcript.\n"
+        "- Prefer open-ended questions first, then precise follow-ups that ask for concrete examples.\n"
+        "- Focus on workload balance, on-call load, team process, planning, manager style, cross-team dependencies, career growth, technical scope, and team health.\n"
+        "- Keep language respectful, curious, and ready to speak.\n"
+    ),
     "behavior": (
         f"{COMMON_RULES}\n\n"
         "Behavioral response contract:\n"

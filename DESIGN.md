@@ -76,6 +76,7 @@ Command:
 .venv/bin/python main.py --round design
 .venv/bin/python main.py --round behavior
 .venv/bin/python main.py --round offer
+.venv/bin/python main.py --round qa
 ```
 
 Round prompts live in `src/gpt/constants.py`. Editable context files live in `context/`:
@@ -84,6 +85,7 @@ Round prompts live in `src/gpt/constants.py`. Editable context files live in `co
 - `design.md`
 - `behavior.md`
 - `offer.md`
+- `qa.md`
 
 `ensure_context_templates()` creates any missing context file with a placeholder. If a matching legacy file exists under `~/.secondvoice/context/`, it is copied into the repo context directory.
 

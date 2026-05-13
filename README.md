@@ -54,6 +54,7 @@ Stream and submit to ChatGPT:
 .venv/bin/python main.py --round design
 .venv/bin/python main.py --round behavior
 .venv/bin/python main.py --round offer
+.venv/bin/python main.py --round qa
 ```
 
 Print finalized transcripts without submitting to ChatGPT:
@@ -68,6 +69,7 @@ Round context files are loaded from `context/` in this repository:
 - `design.md`
 - `behavior.md`
 - `offer.md`
+- `qa.md`
 
 Missing files are auto-created with editable placeholders on startup. Legacy files under `~/.secondvoice/context/` are copied into `context/` when a repo-local file is missing.
 
